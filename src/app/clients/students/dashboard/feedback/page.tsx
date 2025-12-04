@@ -8,7 +8,7 @@ import {
 } from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator";
 
-export default function IdValidationPage() {
+export default function FeedbackPage() {
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -22,13 +22,13 @@ export default function IdValidationPage() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage className="text-lg">ID Validation Request</BreadcrumbPage>
+                <BreadcrumbPage className="text-lg">Give Feedback</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4">
-          <h1>ID Validation Request</h1>
+          <h1>Feedback</h1>
         </div>
       </SidebarInset>
     </SidebarProvider>

@@ -4,8 +4,14 @@ import * as React from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 
+import {
+  IdCardLanyardIcon,
+  UserIcon,
+  SendIcon,
+} from "lucide-react"
+
 import { DatePicker } from "@/components/date-picker";
-import { NavUser } from "@/components/nav-user";
+import { NavUser } from "@/components/student-nav-user";
 import {
   Sidebar,
   SidebarContent,
@@ -46,19 +52,34 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
                   pathname.includes("validation-request") ? "bg-primary text-primary-foreground" : ""
                 )}
               >
+                <IdCardLanyardIcon />
                 ID Validation Request
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>
 
           <SidebarMenuItem>
-            <Link href="/clients/students/dashboard/inbox">
+            <Link href="/clients/students/dashboard/user-info">
               <SidebarMenuButton
                 className={cn(
-                  pathname.includes("inbox") ? "bg-primary text-primary-foreground" : ""
+                  pathname.includes("user-info") ? "bg-primary text-primary-foreground" : ""
                 )}
               >
-                Inbox
+                <UserIcon />
+                User Information
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem>
+            <Link href="/clients/students/dashboard/feedback">
+              <SidebarMenuButton
+                className={cn(
+                  pathname.includes("feedback") ? "bg-primary text-primary-foreground" : ""
+                )}
+              >
+                <SendIcon />
+                Give Feedback
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>
