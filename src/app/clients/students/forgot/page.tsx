@@ -1,4 +1,4 @@
-import { StudentForgotPasswordForm } from "@/components/student-forgot-form";
+import { StudentForgotPasswordForm } from "@/components/student-forgot-password";
 
 export default function StudentForgotPasswordPage() {
   return (
