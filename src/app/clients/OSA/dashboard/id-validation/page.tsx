@@ -7,8 +7,39 @@ import {
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator";
+import { columns, Requests } from "@/components/osa-columns"
+import { DataTable } from "@/components/osa-data-table"
+import { db } from "@/lib/firebaseConfig"
+import { collection, getDocs } from "firebase/firestore"
 
-export default function ValidationPage() {
+async function getData(): Promise<Requests[]> {
+  try {
+    const requestsCollection = collection(db, "validation_requests")
+    const snapshot = await getDocs(requestsCollection)
+    
+    const data: Requests[] = snapshot.docs.map((doc) => ({
+      requestId: doc.data().requestId,
+      studentId: doc.data().studentId,
+      studentName: doc.data().studentName,
+      tupId: doc.data().tupId,
+      email: doc.data().email,
+      phoneNumber: doc.data().phoneNumber,
+      idPicture: doc.data().idPicture,
+      selfiePictures: doc.data().selfiePictures,
+      status: doc.data().status,
+      requestTime: doc.data().requestTime,
+    }))
+    
+    return data
+  } catch (error) {
+    console.error("Error fetching data from Firestore:", error)
+    return []
+  }
+}
+
+export default async function ValidationPage() {
+  const data = await getData()
+
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -28,7 +59,7 @@ export default function ValidationPage() {
           </Breadcrumb>
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4">
-          <h1>Validation Requests</h1>
+          <DataTable columns={columns} data={data} />
         </div>
       </SidebarInset>
     </SidebarProvider>
