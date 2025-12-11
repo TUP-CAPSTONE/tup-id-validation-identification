@@ -1,5 +1,9 @@
 "use client";
 
+import { auth, db } from "@/lib/firebaseConfig";
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from "firebase/auth";
+import { doc, setDoc, serverTimestamp, query, collection, where, getDocs } from "firebase/firestore";
+
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -66,30 +70,39 @@ export function StudentRegistrationForm({
     }
 
     try {
-      // TODO: Replace with your actual API call
-      const response = await fetch("/api/student/register", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({
-          firstName: formData.firstName,
-          lastName: formData.lastName,
-          email: formData.email,
-          studentId: formData.studentId,
-          phone: formData.phone,
-          password: formData.password,
-        }),
-      });
-
-      if (!response.ok) {
-        throw new Error("Registration failed");
+      // OPTIONAL: check for existing studentId
+      const q = query(collection(db, "students"), where("studentId", "==", formData.studentId));
+      const snap = await getDocs(q);
+      if (!snap.empty) {
+        throw new Error("This Student ID is already registered. Contact admin if this is a mistake.");
       }
 
-      const data = await response.json();
-      console.log("Registration successful:", data);
-      
-      // TODO: Redirect to login or dashboard
-      // window.location.href = "/student/login";
-      
+      // Create Auth user
+      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
+      const user = userCredential.user;
+
+      // Optional: set display name
+      await updateProfile(user, { displayName: `${formData.firstName} ${formData.lastName}` });
+
+      // Create Firestore profile doc (uid as doc id)
+      await setDoc(doc(db, "students", user.uid), {
+        uid: user.uid,
+        email: formData.email,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        studentId: formData.studentId,
+        phone: formData.phone || null,
+        status: "pending",
+        createdAt: serverTimestamp(),
+      });
+
+      // Send verification email
+      await sendEmailVerification(user);
+
+      console.log("Registration successful for uid:", user.uid);
+      // Optional redirect
+      // window.location.href = "/clients/students/login?registered=1";
+
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
     } finally {
