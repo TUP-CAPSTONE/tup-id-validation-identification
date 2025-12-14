@@ -46,18 +46,39 @@ export function StudentLoginForm({
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (user) {
-        // User is logged in, fetch their profile data
+        // User is logged in, check if they're approved
         try {
-          const studentRef = doc(db, "students", user.uid);
-          const studentSnap = await getDoc(studentRef);
-          if (studentSnap.exists()) {
-            const data = studentSnap.data();
+          // Check if user is in students_approved
+          const approvedRef = doc(db, "students_approved", user.uid);
+          const approvedSnap = await getDoc(approvedRef);
+          
+          if (approvedSnap.exists()) {
+            const data = approvedSnap.data();
             setCurrentUser({
               uid: user.uid,
               firstName: data.firstName || "",
               lastName: data.lastName || "",
               email: data.email || user.email || "",
             });
+          } else {
+            // Check if user is in students_pending
+            const pendingRef = doc(db, "students_pending", user.uid);
+            const pendingSnap = await getDoc(pendingRef);
+            
+            if (pendingSnap.exists()) {
+              const data = pendingSnap.data();
+              if (data.status === "rejected") {
+                // Account is rejected, sign out
+                await signOut(auth);
+                setError("Your account has been rejected. Please contact support.");
+              } else if (data.status === "pending") {
+                // Account is pending, redirect to pending page
+                router.push("/clients/students/pending");
+              }
+            } else {
+              // User not found in either collection, sign out
+              await signOut(auth);
+            }
           }
         } catch (err) {
           console.warn("Could not fetch user profile:", err);
@@ -106,11 +127,22 @@ export function StudentLoginForm({
       if (!formData.emailOrStudentId.includes("@")) {
         // It's a student ID, find the corresponding email
         console.log("Input is student ID, looking up email...");
-        const q = query(
-          collection(db, "students"),
+        
+        // First check students_approved
+        let q = query(
+          collection(db, "students_approved"),
           where("studentId", "==", formData.emailOrStudentId)
         );
-        const snap = await getDocs(q);
+        let snap = await getDocs(q);
+
+        if (snap.empty) {
+          // Check students_pending
+          q = query(
+            collection(db, "students_pending"),
+            where("studentId", "==", formData.emailOrStudentId)
+          );
+          snap = await getDocs(q);
+        }
 
         if (snap.empty) {
           throw new Error(
@@ -133,18 +165,43 @@ export function StudentLoginForm({
 
       console.log("Login successful for:", user.uid);
 
-      // Update last login in Firestore
-      try {
-        const studentRef = doc(db, "students", user.uid);
-        await updateDoc(studentRef, {
-          lastLogin: new Date(),
-        });
-      } catch (err) {
-        console.warn("Could not update last login:", err);
-      }
+      // Check if user is in students_approved
+      const approvedRef = doc(db, "students_approved", user.uid);
+      const approvedSnap = await getDoc(approvedRef);
 
-      // Redirect to dashboard
-      router.push("/clients/students/dashboard");
+      if (approvedSnap.exists()) {
+        // User is approved, allow access
+        try {
+          await updateDoc(approvedRef, {
+            lastLogin: new Date(),
+          });
+        } catch (err) {
+          console.warn("Could not update last login:", err);
+        }
+        router.push("/clients/students/dashboard");
+      } else {
+        // Check if user is in students_pending
+        const pendingRef = doc(db, "students_pending", user.uid);
+        const pendingSnap = await getDoc(pendingRef);
+
+        if (pendingSnap.exists()) {
+          const data = pendingSnap.data();
+          if (data.status === "rejected") {
+            // Account is rejected
+            await signOut(auth);
+            throw new Error("Your account has been rejected. Please contact support.");
+          } else if (data.status === "pending") {
+            // Account is pending
+            await signOut(auth);
+            router.push("/clients/students/pending");
+            return;
+          }
+        } else {
+          // User not found in either collection
+          await signOut(auth);
+          throw new Error("Account not found. Please contact support.");
+        }
+      }
 
     } catch (err: any) {
       console.error("Login error:", err);

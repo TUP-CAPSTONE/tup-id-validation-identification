@@ -1,7 +1,7 @@
 "use client";
 
 import { auth, db } from "@/lib/firebaseConfig";
-import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile, signOut } from "firebase/auth";
 import { doc, setDoc, serverTimestamp, query, collection, where, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
@@ -75,10 +75,16 @@ export function StudentRegistrationForm({
     try {
       console.log("Starting registration for:", formData.studentId);
 
-      // Check for existing studentId
-      const q = query(collection(db, "students"), where("studentId", "==", formData.studentId));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
+      // Check for existing studentId in both pending and approved
+      const pendingQ = query(collection(db, "students_pending"), where("studentId", "==", formData.studentId));
+      const pendingSnap = await getDocs(pendingQ);
+      if (!pendingSnap.empty) {
+        throw new Error("This Student ID is already registered. Contact admin if this is a mistake.");
+      }
+
+      const approvedQ = query(collection(db, "students_approved"), where("studentId", "==", formData.studentId));
+      const approvedSnap = await getDocs(approvedQ);
+      if (!approvedSnap.empty) {
         throw new Error("This Student ID is already registered. Contact admin if this is a mistake.");
       }
 
@@ -96,8 +102,8 @@ export function StudentRegistrationForm({
         displayName: `${formData.firstName} ${formData.lastName}`,
       });
 
-      // Create Firestore profile doc (uid as doc id)
-      await setDoc(doc(db, "students", user.uid), {
+      // Create Firestore profile doc in students_pending (uid as doc id)
+      await setDoc(doc(db, "students_pending", user.uid), {
         uid: user.uid,
         email: formData.email,
         firstName: formData.firstName,
@@ -107,14 +113,18 @@ export function StudentRegistrationForm({
         status: "pending",
         createdAt: serverTimestamp(),
       });
-      console.log("Firestore profile created");
+      console.log("Firestore pending profile created");
 
       // Send verification email
       await sendEmailVerification(user);
       console.log("Verification email sent to:", formData.email);
 
+      // Sign out the user
+      await signOut(auth);
+      console.log("User signed out after registration");
+
       setSuccess(
-        "Registration successful! Redirecting to login page..."
+        "Registration successful! Redirecting to confirmation page..."
       );
 
       // Reset form
@@ -128,9 +138,9 @@ export function StudentRegistrationForm({
         confirmPassword: "",
       });
 
-      // Redirect to login page after 2 seconds
+      // Redirect to thank-you page after 2 seconds
       setTimeout(() => {
-        router.push("/clients/students/login");
+        router.push("/clients/students/thank-you");
       }, 2000);
 
     } catch (err: any) {
