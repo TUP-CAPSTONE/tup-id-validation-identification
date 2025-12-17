@@ -1,8 +1,12 @@
 "use client";
 
 import * as React from "react";
+import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
+import { onAuthStateChanged } from "firebase/auth";
+import { doc, getDoc } from "firebase/firestore";
+import { auth, db } from "@/lib/firebaseConfig";
 
 import {
   IdCardLanyardIcon,
@@ -24,22 +28,41 @@ import {
 } from "@/components/ui/sidebar";
 import { cn } from "@/lib/utils";
 
-// This is sample data.
-const data = {
-  user: {
-    name: "Juan Dela Cruz",
-    email: "student@tup.edu.ph",
-    avatar: "/avatars/shadcn.jpg",
-  },
-};
-
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
+  const [userData, setUserData] = useState({
+    name: "Loading...",
+    email: "Loading...",
+    avatar: "/avatars/shadcn.jpg",
+  });
+
+  useEffect(() => {
+    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+      if (user) {
+        try {
+          const studentRef = doc(db, "students", user.uid);
+          const studentSnap = await getDoc(studentRef);
+          if (studentSnap.exists()) {
+            const data = studentSnap.data();
+            setUserData({
+              name: `${data.firstName} ${data.lastName}`,
+              email: data.email,
+              avatar: "/avatars/shadcn.jpg",
+            });
+          }
+        } catch (err) {
+          console.warn("Could not fetch user profile:", err);
+        }
+      }
+    });
+
+    return () => unsubscribe();
+  }, []);
 
   return (
     <Sidebar {...props}>
       <SidebarHeader className="border-sidebar-border h-16 border-b">
-        <NavUser user={data.user} />
+        <NavUser user={userData} />
       </SidebarHeader>
       <SidebarContent className="overflow-hidden">
         <DatePicker />
