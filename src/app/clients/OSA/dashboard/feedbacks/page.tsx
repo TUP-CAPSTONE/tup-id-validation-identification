@@ -1,18 +1,14 @@
-import { AppSidebar } from "@/components/osa-app-sidebar"
+import { AppSidebar } from "@/components/osa-app-sidebar";
+import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
 import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbList,
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb"
-import { Separator } from "@/components/ui/separator"
-import {
-  SidebarInset,
-  SidebarProvider,
-  SidebarTrigger,
-} from "@/components/ui/sidebar"
+import { Separator } from "@/components/ui/separator";
 
-export default function DashboardPage() {
+export default function FeedbacksPage() {
   return (
     <SidebarProvider>
       <AppSidebar />
@@ -26,19 +22,15 @@ export default function DashboardPage() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage className="text-lg">Dashboard</BreadcrumbPage>
+                <BreadcrumbPage className="text-lg">Feedbacks</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
         </header>
         <div className="flex flex-1 flex-col gap-4 p-4">
-          <div className="grid auto-rows-min gap-4 md:grid-cols-5">
-            {Array.from({ length: 20 }).map((_, i) => (
-              <div key={i} className="bg-muted/50 aspect-square rounded-xl" />
-            ))}
-          </div>
+          <h1>Feedbacks</h1>
         </div>
       </SidebarInset>
     </SidebarProvider>
-  )
+  );
 }
