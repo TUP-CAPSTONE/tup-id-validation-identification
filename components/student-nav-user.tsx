@@ -1,5 +1,8 @@
 "use client"
 
+import { signOut } from "firebase/auth"
+import { auth } from "@/lib/firebaseConfig"
+import { useRouter } from "next/navigation"
 import {
   BadgeCheck,
   Bell,
@@ -40,6 +43,17 @@ export function NavUser({
   }
 }) {
   const { isMobile } = useSidebar()
+  const router = useRouter()
+
+  const handleLogout = async () => {
+    try {
+      await signOut(auth)
+      console.log("User logged out successfully")
+      router.push("/clients/students/login")
+    } catch (err) {
+      console.error("Logout error:", err)
+    }
+  }
 
   return (
     <SidebarMenu>
@@ -81,7 +95,7 @@ export function NavUser({
             </DropdownMenuLabel>
             <DropdownMenuSeparator />
             <DropdownMenuGroup>
-              <DropdownMenuItem>
+              <DropdownMenuItem onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />
                 Log out
               </DropdownMenuItem>
