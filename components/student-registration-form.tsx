@@ -1,8 +1,8 @@
 "use client";
 
 import { auth, db } from "@/lib/firebaseConfig";
-import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile } from "firebase/auth";
-import { doc, setDoc, serverTimestamp, query, collection, where, getDocs } from "firebase/firestore";
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile, signOut } from "firebase/auth";
+import { doc, setDoc, serverTimestamp, query, collection, where, getDocs, addDoc } from "firebase/firestore";
 
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -27,6 +27,8 @@ export function StudentRegistrationForm({
   className,
   ...props
 }: React.ComponentProps<"div">) {
+  const STUDENTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_STUDENTS_COLLECTION || "students";
+  const REG_REQUESTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_REG_REQUESTS_COLLECTION || "registration_requests";
   const [formData, setFormData] = useState({
     firstName: "",
     lastName: "",
@@ -35,8 +37,14 @@ export function StudentRegistrationForm({
     phone: "",
     password: "",
     confirmPassword: "",
+    // optional fields used for registration requests
+    course: "",
+    section: "",
+    yearLevel: "",
+    remarks: "",
   });
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
 
   const handleSubmit = async () => {
@@ -50,7 +58,10 @@ export function StudentRegistrationForm({
       !formData.email ||
       !formData.studentId ||
       !formData.password ||
-      !formData.confirmPassword
+      !formData.confirmPassword ||
+      !formData.course ||
+      !formData.section ||
+      !formData.yearLevel
     ) {
       setError("Please fill in all required fields");
       setLoading(false);
@@ -70,22 +81,32 @@ export function StudentRegistrationForm({
     }
 
     try {
-      // OPTIONAL: check for existing studentId
-      const q = query(collection(db, "students"), where("studentId", "==", formData.studentId));
-      const snap = await getDocs(q);
-      if (!snap.empty) {
+      // OPTIONAL: check if student already exists in students collection
+      const qStudents = query(collection(db, STUDENTS_COLLECTION), where("studentId", "==", formData.studentId));
+      const snapStudents = await getDocs(qStudents);
+      if (!snapStudents.empty) {
         throw new Error("This Student ID is already registered. Contact admin if this is a mistake.");
       }
 
-      // Create Auth user
+      // OPTIONAL: check for existing registration requests for same studentNumber
+      const qReqs = query(collection(db, REG_REQUESTS_COLLECTION), where("studentNumber", "==", formData.studentId));
+      const snapReqs = await getDocs(qReqs);
+      if (!snapReqs.empty) {
+        // if any existing request is Pending or Approved, block duplicate
+        const existing = snapReqs.docs.map(d => d.data());
+        const hasActive = existing.some((r: any) => r.status === "Pending" || r.status === "Approved");
+        if (hasActive) throw new Error("A registration request for this Student ID already exists.");
+      }
+
+      // Create Auth user now (account will exist but access is gated by 'students' status)
       const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
       const user = userCredential.user;
 
-      // Optional: set display name
+      // set display name
       await updateProfile(user, { displayName: `${formData.firstName} ${formData.lastName}` });
 
-      // Create Firestore profile doc (uid as doc id)
-      await setDoc(doc(db, "students", user.uid), {
+      // Create Firestore profile doc (uid as doc id) with pending status
+      await setDoc(doc(db, STUDENTS_COLLECTION, user.uid), {
         uid: user.uid,
         email: formData.email,
         firstName: formData.firstName,
@@ -93,15 +114,36 @@ export function StudentRegistrationForm({
         studentId: formData.studentId,
         phone: formData.phone || null,
         status: "pending",
+        course: formData.course || null,
+        section: formData.section || null,
+        yearLevel: formData.yearLevel ? Number(formData.yearLevel) : null,
         createdAt: serverTimestamp(),
+      });
+
+      // Create registration request document (admin will approve later)
+      await addDoc(collection(db, REG_REQUESTS_COLLECTION), {
+        uid: user.uid,
+        email: formData.email,
+        firstName: formData.firstName,
+        lastName: formData.lastName,
+        studentNumber: formData.studentId,
+        phone: formData.phone || null,
+        requestedAt: serverTimestamp(),
+        status: "Pending",
+        course: formData.course || null,
+        section: formData.section || null,
+        yearLevel: formData.yearLevel ? Number(formData.yearLevel) : null,
+        remarks: formData.remarks || null,
+        reviewBy: null,
       });
 
       // Send verification email
       await sendEmailVerification(user);
 
-      console.log("Registration successful for uid:", user.uid);
-      // Optional redirect
-      // window.location.href = "/clients/students/login?registered=1";
+      // Sign out immediately so user cannot access gated areas until admin approves
+      await signOut(auth);
+
+      setSuccess("Registration submitted. Check your email for verification. Your account will be activated after admin approval.");
 
     } catch (err) {
       setError(err instanceof Error ? err.message : "Registration failed");
@@ -127,8 +169,13 @@ export function StudentRegistrationForm({
                 <AlertDescription>{error}</AlertDescription>
               </Alert>
             )}
+            {success && (
+              <Alert className="mb-4">
+                <AlertDescription>{success}</AlertDescription>
+              </Alert>
+            )}
 
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <Field>
                 <FieldLabel htmlFor="firstName">First Name</FieldLabel>
                 <Input
@@ -204,6 +251,55 @@ export function StudentRegistrationForm({
               />
             </Field>
 
+            <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
+              <Field>
+                <FieldLabel htmlFor="course">Course</FieldLabel>
+                <Input
+                  id="course"
+                  type="text"
+                  placeholder="BSCS"
+                  value={formData.course}
+                  onChange={(e) =>
+                    setFormData({ ...formData, course: e.target.value })
+                  }
+                  disabled={loading}
+                  required
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="section">Section</FieldLabel>
+                <Input
+                  id="section"
+                  type="text"
+                  placeholder="A"
+                  value={formData.section}
+                  onChange={(e) =>
+                    setFormData({ ...formData, section: e.target.value })
+                  }
+                  disabled={loading}
+                  required
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel htmlFor="yearLevel">Year Level</FieldLabel>
+                <Input
+                  id="yearLevel"
+                  type="number"
+                  min={1}
+                  max={6}
+                  placeholder="3"
+                  value={formData.yearLevel}
+                  onChange={(e) =>
+                    setFormData({ ...formData, yearLevel: e.target.value })
+                  }
+                  disabled={loading}
+                  required
+                />
+              </Field>
+            </div>
+
             <Field>
               <FieldLabel htmlFor="password">Password</FieldLabel>
               <Input
@@ -223,25 +319,19 @@ export function StudentRegistrationForm({
             </Field>
 
             <Field>
-              <FieldLabel htmlFor="confirmPassword">
-                Confirm Password
-              </FieldLabel>
+              <FieldLabel htmlFor="confirmPassword">Confirm Password</FieldLabel>
               <Input
                 id="confirmPassword"
                 type="password"
                 placeholder="Re-enter password"
                 value={formData.confirmPassword}
                 onChange={(e) =>
-                  setFormData({
-                    ...formData,
-                    confirmPassword: e.target.value,
-                  })
+                  setFormData({ ...formData, confirmPassword: e.target.value })
                 }
                 disabled={loading}
                 required
               />
             </Field>
-
             <Field>
               <Button 
                 onClick={handleSubmit} 
