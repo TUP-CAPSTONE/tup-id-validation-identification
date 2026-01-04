@@ -1,6 +1,8 @@
 "use client";
 
 import { useState } from "react";
+import { db } from "@/lib/firebaseConfig";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -49,11 +51,50 @@ export function StudentLoginForm({
         body: JSON.stringify(formData),
       });
 
-      if (!response.ok) {
-        throw new Error("Invalid credentials");
+      let data: any = null;
+      try {
+        data = await response.json();
+      } catch (e) {
+        // ignore parse errors, we'll handle based on status
       }
 
-      const data = await response.json();
+      if (!response.ok) {
+        // Check backend-provided flag first
+        if (data?.error === "not_approved" || response.status === 403) {
+          setError("Account has yet to be approved");
+          setLoading(false);
+          return;
+        }
+
+        // Fallback: look for a pending registration request in Firestore
+        try {
+          const REG_REQUESTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_REG_REQUESTS_COLLECTION || "registration_requests";
+          const q = query(collection(db, REG_REQUESTS_COLLECTION), where("studentNumber", "==", formData.studentId));
+          const snap = await getDocs(q);
+          if (!snap.empty) {
+            const hasPending = snap.docs.some(d => {
+              const r: any = d.data();
+              return r.status === "Pending" || r.status === "pending";
+            });
+            if (hasPending) {
+              setError("Account has yet to be approved");
+              setLoading(false);
+              return;
+            }
+          }
+        } catch (e) {
+          // ignore Firestore errors and fallthrough to generic message
+        }
+
+        throw new Error(data?.message || "Invalid credentials");
+      }
+
+      if (data?.approved === false) {
+        setError("Account has yet to be approved");
+        setLoading(false);
+        return;
+      }
+
       console.log("Login successful:", data);
       
       // TODO: Redirect to dashboard or save token
