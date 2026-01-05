@@ -42,42 +42,47 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
       }
 
       try {
-        const approvedRef = doc(db, "students_approved", user.uid);
-        const approvedSnap = await getDoc(approvedRef);
-
-        if (approvedSnap.exists()) {
-          const data = approvedSnap.data() as any;
-          try {
-            await updateDoc(approvedRef, { lastLogin: new Date() as any });
-          } catch (e) {
-            // ignore update errors
-          }
-          setCurrentUser({ uid: user.uid, firstName: data.firstName || "", lastName: data.lastName || "", email: data.email || user.email || "" });
+        // First: check if the student's profile exists in the students collection (approved users)
+        const studentRef = doc(db, STUDENTS_COLLECTION, user.uid);
+        const studentSnap = await getDoc(studentRef);
+        if (studentSnap.exists()) {
+          const sdata = studentSnap.data() as any;
+          setCurrentUser({ uid: user.uid, firstName: sdata.firstName || "", lastName: sdata.lastName || "", email: sdata.email || user.email || "" });
           router.replace("/clients/students/dashboard");
           setCheckingAuth(false);
           return;
         }
 
-        const pendingRef = doc(db, "students_pending", user.uid);
-        const pendingSnap = await getDoc(pendingRef);
-        if (pendingSnap.exists()) {
-          const data = pendingSnap.data() as any;
-          if (data.status === "rejected") {
+        // If no student profile, check registration requests for status
+        const q = query(collection(db, REG_REQUESTS_COLLECTION), where("uid", "==", user.uid));
+        const reqSnap = await getDocs(q);
+        if (!reqSnap.empty) {
+          const req = reqSnap.docs[0].data() as any;
+          const status = (req.status || "").toString();
+          if (status === "Approved") {
+            // Admin marked approved but profile not yet created — sign out and inform user
             await signOut(auth);
-            setError("Your account has been rejected. Please contact support.");
+            setError("Your registration was approved but your account is not yet active. Please wait a moment and try again.");
             setCheckingAuth(false);
             return;
           }
-          if (data.status === "pending") {
+          if (status === "Pending") {
             await signOut(auth);
             router.replace("/clients/students/pending");
             setCheckingAuth(false);
             return;
           }
+          if (status === "Rejected") {
+            await signOut(auth);
+            setError("Your account has been rejected. Please contact support.");
+            setCheckingAuth(false);
+            return;
+          }
         }
 
-        // Not approved or pending - sign out for safety
+        // No profile and no registration request → deny access
         await signOut(auth);
+        setError("Account not found. Please register or contact support.");
         setCheckingAuth(false);
       } catch (err) {
         console.error("Auth check error:", err);
@@ -91,7 +96,7 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
   const resolveEmailFromId = async (val: string) => {
     const isEmail = val.includes("@");
     if (isEmail) return val;
-    const q = query(collection(db, "students"), where("studentId", "==", val));
+    const q = query(collection(db, STUDENTS_COLLECTION), where("studentId", "==", val));
     const snap = await getDocs(q);
     if (snap.empty) throw new Error("No student found with that ID");
     const data = snap.docs[0].data() as any;
