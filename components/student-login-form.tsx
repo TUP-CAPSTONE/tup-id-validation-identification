@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebaseConfig";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
-import { doc, getDoc, collection, query, where, getDocs, updateDoc } from "firebase/firestore";
+import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 import { cn } from "@/lib/utils";
@@ -24,6 +24,10 @@ import {
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
+// Firestore collection constants
+const STUDENTS_COLLECTION = "students";
+const REG_REQUESTS_COLLECTION = "registrationRequests";
+
 export function StudentLoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const router = useRouter();
   const [formData, setFormData] = useState({ emailOrStudentId: "", password: "" });
@@ -42,12 +46,17 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
       }
 
       try {
-        // First: check if the student's profile exists in the students collection (approved users)
+        // Check if student's profile exists in the students collection
         const studentRef = doc(db, STUDENTS_COLLECTION, user.uid);
         const studentSnap = await getDoc(studentRef);
         if (studentSnap.exists()) {
           const sdata = studentSnap.data() as any;
-          setCurrentUser({ uid: user.uid, firstName: sdata.firstName || "", lastName: sdata.lastName || "", email: sdata.email || user.email || "" });
+          setCurrentUser({
+            uid: user.uid,
+            firstName: sdata.firstName || "",
+            lastName: sdata.lastName || "",
+            email: sdata.email || user.email || "",
+          });
           router.replace("/clients/students/dashboard");
           setCheckingAuth(false);
           return;
@@ -58,31 +67,33 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
         const reqSnap = await getDocs(q);
         if (!reqSnap.empty) {
           const req = reqSnap.docs[0].data() as any;
-          const status = (req.status || "").toString();
-          if (status === "Approved") {
+          const status = (req.status || "").toString().toLowerCase();
+
+          if (status === "approved") {
             // Admin marked approved but profile not yet created — sign out and inform user
             await signOut(auth);
-            setError("Your registration was approved but your account is not yet active. Please wait a moment and try again.");
+            setError("Your account has been approved but your profile is not yet created. Please contact support.");
             setCheckingAuth(false);
             return;
           }
-          if (status === "Pending") {
+
+          if (status === "pending") {
             await signOut(auth);
             router.replace("/clients/students/pending");
             setCheckingAuth(false);
             return;
           }
-          if (status === "Rejected") {
+
+          if (status === "rejected") {
             await signOut(auth);
-            setError("Your account has been rejected. Please contact support.");
+            setError("Your registration request has been rejected. Please contact support.");
             setCheckingAuth(false);
             return;
           }
         }
 
-        // No profile and no registration request → deny access
+        // Not approved, pending, or no request — sign out for safety
         await signOut(auth);
-        setError("Account not found. Please register or contact support.");
         setCheckingAuth(false);
       } catch (err) {
         console.error("Auth check error:", err);
@@ -109,7 +120,7 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
     try {
       const email = await resolveEmailFromId(formData.emailOrStudentId.trim());
       await signInWithEmailAndPassword(auth, email, formData.password);
-      // onAuthStateChanged will redirect
+      // onAuthStateChanged will handle redirect
     } catch (err) {
       const e: any = err;
       if (e?.code === "auth/user-not-found") {
@@ -172,7 +183,15 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
               <>
                 <Field>
                   <FieldLabel htmlFor="emailOrStudentId">Email or Student ID</FieldLabel>
-                  <Input id="emailOrStudentId" type="text" placeholder="student@tup.edu.ph or TUPM-22-1234" value={formData.emailOrStudentId} onChange={(e) => setFormData({ ...formData, emailOrStudentId: e.target.value })} disabled={loading} required />
+                  <Input
+                    id="emailOrStudentId"
+                    type="text"
+                    placeholder="student@tup.edu.ph or TUPM-22-1234"
+                    value={formData.emailOrStudentId}
+                    onChange={(e) => setFormData({ ...formData, emailOrStudentId: e.target.value })}
+                    disabled={loading}
+                    required
+                  />
                   <FieldDescription>Enter your email address or student ID</FieldDescription>
                 </Field>
 
@@ -181,13 +200,23 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
                     <FieldLabel htmlFor="password">Password</FieldLabel>
                     <a href="/clients/students/forgot" className="ml-auto inline-block text-sm underline-offset-4 hover:underline">Forgot your password?</a>
                   </div>
-                  <Input id="password" type="password" placeholder="Enter your password" value={formData.password} onChange={(e) => setFormData({ ...formData, password: e.target.value })} disabled={loading} required />
+                  <Input
+                    id="password"
+                    type="password"
+                    placeholder="Enter your password"
+                    value={formData.password}
+                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                    disabled={loading}
+                    required
+                  />
                 </Field>
 
                 <Field>
                   <Button onClick={handleSubmit} disabled={loading} className="w-full">{loading ? "Logging in..." : "Login"}</Button>
                   <Button variant="outline" type="button" disabled={loading} className="w-full">Login with Google</Button>
-                  <FieldDescription className="text-center mt-4">Don't have an account? <a href="/clients/students/register" className="underline underline-offset-4 hover:text-primary font-semibold">Sign up</a></FieldDescription>
+                  <FieldDescription className="text-center mt-4">
+                    Don't have an account? <a href="/clients/students/register" className="underline underline-offset-4 hover:text-primary font-semibold">Sign up</a>
+                  </FieldDescription>
                 </Field>
               </>
             )}
@@ -201,4 +230,3 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
     </div>
   );
 }
-

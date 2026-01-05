@@ -115,7 +115,6 @@ export function StudentRegistrationForm({
         course: formData.course || null,
         section: formData.section || null,
         yearLevel: formData.yearLevel ? Number(formData.yearLevel) : null,
-        remarks: formData.remarks || null,
         createdAt: serverTimestamp(),
       });
 
