@@ -56,9 +56,10 @@ export function AdminDashboard() {
 
       setPendingAccounts(accounts);
       console.log("Fetched pending accounts:", accounts.length);
-    } catch (err: any) {
-      console.error("Error fetching pending accounts:", err);
-      setError(err.message || "Failed to fetch pending accounts");
+    } catch (err) {
+      const e: any = err;
+      console.error("Error fetching pending accounts:", e);
+      setError(e?.message || "Failed to fetch pending accounts");
     } finally {
       setLoading(false);
     }
@@ -88,9 +89,10 @@ export function AdminDashboard() {
       // Refresh the list
       await fetchPendingAccounts();
       console.log("Account approved:", account.uid);
-    } catch (err: any) {
-      console.error("Error approving account:", err);
-      setError(err.message || "Failed to approve account");
+    } catch (err) {
+      const e: any = err;
+      console.error("Error approving account:", e);
+      setError(e?.message || "Failed to approve account");
     } finally {
       setApproving(null);
     }
@@ -111,9 +113,10 @@ export function AdminDashboard() {
       // Refresh the list
       await fetchPendingAccounts();
       console.log("Account rejected:", account.uid);
-    } catch (err: any) {
-      console.error("Error rejecting account:", err);
-      setError(err.message || "Failed to reject account");
+    } catch (err) {
+      const e: any = err;
+      console.error("Error rejecting account:", e);
+      setError(e?.message || "Failed to reject account");
     } finally {
       setRejecting(null);
     }
