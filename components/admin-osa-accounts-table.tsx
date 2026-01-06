@@ -13,10 +13,7 @@ import {
 import { Button } from "@/components/ui/button"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
 import { EditOsaAccountDialog } from "@/components/edit-osa-account-dialog"
-import { deleteUser } from "firebase/auth"
-import { auth, db } from "@/lib/firebaseConfig"
-import { doc, deleteDoc } from "firebase/firestore"
-import { OsaAccount } from "@/components/manage-osa-accounts"
+import { OsaAccount } from "@/components/admin-manage-osa-accounts"
 
 interface OsaAccountsTableProps {
   accounts: OsaAccount[]
@@ -28,7 +25,6 @@ export function OsaAccountsTable({ accounts, loading, onAccountsChanged }: OsaAc
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false)
   const [selectedAccount, setSelectedAccount] = useState<OsaAccount | null>(null)
   const [deleting, setDeleting] = useState(false)
-  const [editDialogOpen, setEditDialogOpen] = useState(false)
 
   const handleDeleteClick = (account: OsaAccount) => {
     setSelectedAccount(account)
@@ -36,28 +32,33 @@ export function OsaAccountsTable({ accounts, loading, onAccountsChanged }: OsaAc
   }
 
   const handleConfirmDelete = async () => {
-    if (!selectedAccount) return
+  if (!selectedAccount) return
 
-    setDeleting(true)
-    try {
-      // Delete from Firestore
-      const staffRef = doc(db, "staffs", selectedAccount.id)
-      await deleteDoc(staffRef)
+  setDeleting(true)
+  try {
+    const response = await fetch("/clients/admin/api/delete-osa", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        uid: selectedAccount.id,
+      }),
+    })
 
-      // Note: Deleting from Firebase Auth requires special permissions
-      // In a production app, use Firebase Admin SDK on the backend
-      console.log(`Deleted OSA account: ${selectedAccount.email}`)
-
-      setDeleteDialogOpen(false)
-      setSelectedAccount(null)
-      onAccountsChanged()
-    } catch (err) {
-      console.error("Error deleting account:", err)
-      alert("Failed to delete account")
-    } finally {
-      setDeleting(false)
+    if (!response.ok) {
+      throw new Error("Deletion failed")
     }
+
+    setDeleteDialogOpen(false)
+    setSelectedAccount(null)
+    onAccountsChanged()
+  } catch (error) {
+    console.error("Delete error:", error)
+    alert("Failed to delete OSA account")
+  } finally {
+    setDeleting(false)
   }
+}
+
 
   if (loading) {
     return (

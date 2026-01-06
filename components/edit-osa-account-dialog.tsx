@@ -14,7 +14,7 @@ import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import { updateDoc, doc } from "firebase/firestore"
 import { db } from "@/lib/firebaseConfig"
-import { OsaAccount } from "@/components/manage-osa-accounts"
+import { OsaAccount } from "@/components/admin-manage-osa-accounts"
 
 interface EditOsaAccountDialogProps {
   account: OsaAccount
@@ -46,7 +46,7 @@ export function EditOsaAccountDialog({
     setLoading(true)
 
     try {
-      const staffRef = doc(db, "staffs", account.id)
+      const staffRef = doc(db, "users", account.id)
       await updateDoc(staffRef, {
         name: name.trim(),
       })

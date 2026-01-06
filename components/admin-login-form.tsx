@@ -42,42 +42,23 @@ export function AdminLoginForm({
       const userCredential = await signInWithEmailAndPassword(auth, email, password)
       const user = userCredential.user
 
-      // Check if user exists in staffs collection and has admin role
-      const staffRef = doc(db, "staffs", user.uid)
-      const staffSnap = await getDoc(staffRef)
+      // Check if user exists in users collection and has admin role
+      const userRef = doc(db, "users", user.uid)
+      const userSnap = await getDoc(userRef)
 
-      if (!staffSnap.exists()) {
+      if (!userSnap.exists()) {
         setError("You are not registered as staff")
         await signOut(auth)
         return
       }
 
-      const staffData = staffSnap.data()
-      if (staffData.role !== "admin") {
+      const userData = userSnap.data()
+      if (userData.role !== "admin") {
         setError("You do not have admin privileges")
         await signOut(auth)
         return
       }
 
-      // Check if another admin is already logged in
-      const adminSessionRef = doc(db, "admin_session", "active")
-      const adminSessionSnap = await getDoc(adminSessionRef)
-
-      if (adminSessionSnap.exists()) {
-        const activeAdminUid = adminSessionSnap.data().uid
-        // Sign out the previously logged-in admin
-        await signOut(auth)
-        // Delete the old session
-        await deleteDoc(adminSessionRef)
-      }
-
-      // Create new admin session
-      await setDoc(adminSessionRef, {
-        uid: user.uid,
-        email: user.email,
-        name: staffData.name,
-        loginTime: new Date(),
-      })
 
       // Redirect to admin dashboard
       router.push("/clients/admin")

@@ -45,10 +45,10 @@ export function AdminNavUser() {
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
       if (authUser) {
         try {
-          const staffRef = doc(db, "staffs", authUser.uid)
-          const staffSnap = await getDoc(staffRef)
-          if (staffSnap.exists()) {
-            const data = staffSnap.data()
+          const usersRef = doc(db, "users", authUser.uid)
+          const usersSnap = await getDoc(usersRef)
+          if (usersSnap.exists()) {
+            const data = usersSnap.data()
             setUser({
               name: data.name,
               email: authUser.email || "admin@tup.edu.ph",
@@ -66,10 +66,6 @@ export function AdminNavUser() {
 
   const handleLogout = async () => {
     try {
-      // Delete the admin session
-      const adminSessionRef = doc(db, "admin_session", "active")
-      await deleteDoc(adminSessionRef)
-      
       await signOut(auth)
       console.log("Admin logged out successfully")
       router.push("/clients/admin/login")

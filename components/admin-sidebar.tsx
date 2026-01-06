@@ -93,7 +93,7 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
 
           {/* Account Management Section */}
           <SidebarMenuItem>
-            <Link href="/clients/admin/manage-osa-accounts">
+            <Link href="/clients/admin/dashboard/manage-osa-accounts">
               <SidebarMenuButton
                 className={cn(
                   "rounded-md transition-colors h-12",

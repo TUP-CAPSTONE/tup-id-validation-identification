@@ -69,8 +69,8 @@ export function CreateOsaAccountDialog({
       const userCredential = await createUserWithEmailAndPassword(auth, email, password)
       const user = userCredential.user
 
-      // Create staff document in Firestore
-      await setDoc(doc(db, "staffs", user.uid), {
+      // Create user document in Firestore
+      await setDoc(doc(db, "users", user.uid), {
         name: name.trim(),
         email: email.trim(),
         role: "OSA",

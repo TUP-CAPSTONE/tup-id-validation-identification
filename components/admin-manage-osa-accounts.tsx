@@ -4,7 +4,7 @@ import { useState, useEffect } from "react"
 import { Plus } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card"
-import { OsaAccountsTable } from "@/components/osa-accounts-table"
+import { OsaAccountsTable } from "@/components/admin-osa-accounts-table"
 import { CreateOsaAccountDialog } from "@/components/create-osa-account-dialog"
 import { collection, getDocs, query } from "firebase/firestore"
 import { db } from "@/lib/firebaseConfig"
@@ -25,8 +25,8 @@ export function ManageOsaAccounts() {
   const fetchOsaAccounts = async () => {
     try {
       setLoading(true)
-      const staffsRef = collection(db, "staffs")
-      const q = query(staffsRef)
+      const usersRef = collection(db, "users")
+      const q = query(usersRef)
       const snapshot = await getDocs(q)
       
       const osaNonAdmins = snapshot.docs
