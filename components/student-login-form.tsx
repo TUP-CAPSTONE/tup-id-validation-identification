@@ -25,8 +25,8 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Firestore collection constants
-const STUDENTS_COLLECTION = "students";
-const REG_REQUESTS_COLLECTION = "registrationRequests";
+const STUDENTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_STUDENTS_COLLECTION || "students";
+const REG_REQUESTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_REG_REQUESTS_COLLECTION || "registration_requests";
 
 export function StudentLoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const router = useRouter();

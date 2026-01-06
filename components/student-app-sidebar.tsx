@@ -5,7 +5,7 @@ import { useEffect, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebaseConfig";
 
 import {
@@ -37,26 +37,44 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   });
 
   useEffect(() => {
-    const unsubscribe = onAuthStateChanged(auth, async (user) => {
+    let unsubDoc: (() => void) | null = null;
+    const unsubscribeAuth = onAuthStateChanged(auth, async (user) => {
+      if (unsubDoc) {
+        try { unsubDoc(); } catch (e) {}
+        unsubDoc = null;
+      }
+
       if (user) {
         try {
           const studentRef = doc(db, "students", user.uid);
-          const studentSnap = await getDoc(studentRef);
-          if (studentSnap.exists()) {
-            const data = studentSnap.data();
-            setUserData({
-              name: `${data.firstName} ${data.lastName}`,
-              email: data.email,
-              avatar: "/avatars/shadcn.jpg",
-            });
-          }
+          unsubDoc = onSnapshot(studentRef, (snap) => {
+            if (snap.exists()) {
+              const data: any = snap.data();
+              setUserData({
+                name: `${data.firstName} ${data.lastName}`,
+                email: data.email,
+                avatar: data.avatar || data.profilePicture || "/avatars/shadcn.jpg",
+              });
+            } else {
+              setUserData((u) => ({ ...u, name: user.displayName || "User", email: user.email || "" }));
+            }
+          });
         } catch (err) {
-          console.warn("Could not fetch user profile:", err);
+          console.warn("Could not subscribe to user profile:", err);
         }
+      } else {
+        setUserData({
+          name: "Loading...",
+          email: "Loading...",
+          avatar: "/avatars/shadcn.jpg",
+        });
       }
     });
 
-    return () => unsubscribe();
+    return () => {
+      if (unsubDoc) try { unsubDoc(); } catch(e) {}
+      unsubscribeAuth();
+    };
   }, []);
 
   return (
@@ -72,7 +90,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <Link href="/clients/students/dashboard/validation-request">
               <SidebarMenuButton
                 className={cn(
-                  pathname.includes("validation-request") ? "bg-primary text-primary-foreground" : ""
+                  pathname.includes("validation-request") ? "bg-red-700 text-white" : ""
                 )}
               >
                 <IdCardLanyardIcon />
@@ -85,7 +103,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <Link href="/clients/students/dashboard/user-info">
               <SidebarMenuButton
                 className={cn(
-                  pathname.includes("user-info") ? "bg-primary text-primary-foreground" : ""
+                  pathname.includes("user-info") ? "bg-red-700 text-white" : ""
                 )}
               >
                 <UserIcon />
@@ -98,7 +116,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <Link href="/clients/students/dashboard/feedback">
               <SidebarMenuButton
                 className={cn(
-                  pathname.includes("feedback") ? "bg-primary text-primary-foreground" : ""
+                  pathname.includes("feedback") ? "bg-red-700 text-white" : ""
                 )}
               >
                 <SendIcon />

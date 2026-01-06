@@ -2,7 +2,7 @@
 
 import { auth, db } from "@/lib/firebaseConfig";
 import { useState, useEffect } from "react";
-import { collection, query, where, getDocs, doc, setDoc, deleteDoc, updateDoc } from "firebase/firestore";
+import { collection, query, where, getDocs, doc, setDoc, deleteDoc, updateDoc, serverTimestamp } from "firebase/firestore";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -33,24 +33,35 @@ export function AdminDashboard() {
   const [approving, setApproving] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
 
+  // Collections (use env fallbacks)
+  const REG_REQUESTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_REG_REQUESTS_COLLECTION || "registration_requests";
+  const STUDENTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_STUDENTS_COLLECTION || "students";
+
   // Fetch pending accounts
   const fetchPendingAccounts = async () => {
     try {
       setLoading(true);
       setError("");
 
-      // Query students_pending collection for pending status
+      // Query registration requests collection for pending status
       const q = query(
-        collection(db, "students_pending"),
-        where("status", "==", "pending")
+        collection(db, REG_REQUESTS_COLLECTION),
+        where("status", "in", ["Pending", "pending"]) // accept common casings
       );
       const snap = await getDocs(q);
 
       const accounts: PendingAccount[] = [];
-      snap.forEach((doc) => {
+      snap.forEach((d) => {
+        const data = d.data() as any;
         accounts.push({
-          uid: doc.id,
-          ...doc.data(),
+          uid: d.id,
+          firstName: data.firstName,
+          lastName: data.lastName,
+          email: data.email,
+          studentId: data.studentNumber || data.studentId || "",
+          phone: data.phone || null,
+          createdAt: data.createdAt,
+          status: data.status,
         } as PendingAccount);
       });
 
@@ -74,17 +85,25 @@ export function AdminDashboard() {
     try {
       setApproving(account.uid);
 
-      // Copy to students_approved
-      const approvedRef = doc(db, "students_approved", account.uid);
-      await setDoc(approvedRef, {
-        ...account,
-        status: "approved",
-        approvedAt: new Date(),
+      // Create student profile in students collection
+      const studentRef = doc(db, STUDENTS_COLLECTION, account.uid);
+      await setDoc(studentRef, {
+        uid: account.uid,
+        firstName: account.firstName,
+        lastName: account.lastName,
+        email: account.email,
+        studentId: (account as any).studentId || null,
+        phone: account.phone || null,
+        status: "active",
+        createdAt: account.createdAt || serverTimestamp(),
       });
 
-      // Delete from students_pending
-      const pendingRef = doc(db, "students_pending", account.uid);
-      await deleteDoc(pendingRef);
+      // Update registration request status to Approved
+      const regReqRef = doc(db, REG_REQUESTS_COLLECTION, account.uid);
+      await updateDoc(regReqRef, {
+        status: "Approved",
+        approvedAt: serverTimestamp(),
+      });
 
       // Refresh the list
       await fetchPendingAccounts();
@@ -96,18 +115,18 @@ export function AdminDashboard() {
     } finally {
       setApproving(null);
     }
-  };
+  }; 
 
   // Reject account
   const handleReject = async (account: PendingAccount) => {
     try {
       setRejecting(account.uid);
 
-      // Update status to rejected in students_pending
-      const pendingRef = doc(db, "students_pending", account.uid);
-      await updateDoc(pendingRef, {
-        status: "rejected",
-        rejectedAt: new Date(),
+      // Update status to Rejected in registration requests
+      const regReqRef = doc(db, REG_REQUESTS_COLLECTION, account.uid);
+      await updateDoc(regReqRef, {
+        status: "Rejected",
+        rejectedAt: serverTimestamp(),
       });
 
       // Refresh the list
