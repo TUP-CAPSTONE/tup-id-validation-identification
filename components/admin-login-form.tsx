@@ -19,7 +19,7 @@ import { Input } from "@/components/ui/input"
 import { useState } from "react"
 import { signInWithEmailAndPassword, signOut } from "firebase/auth"
 import { auth, db } from "@/lib/firebaseConfig"
-import { doc, getDoc, setDoc, deleteDoc } from "firebase/firestore"
+import { doc, getDoc } from "firebase/firestore"
 import { useRouter } from "next/navigation"
 
 export function AdminLoginForm({
@@ -38,30 +38,25 @@ export function AdminLoginForm({
     setLoading(true)
 
     try {
-      // Sign in with Firebase
-      const userCredential = await signInWithEmailAndPassword(auth, email, password)
-      const user = userCredential.user
+      // 1️⃣ Firebase Auth login
+      const { user } = await signInWithEmailAndPassword(
+        auth,
+        email,
+        password
+      )
 
-      // Check if user exists in users collection and has admin role
+      // 2️⃣ Firestore role check
       const userRef = doc(db, "users", user.uid)
       const userSnap = await getDoc(userRef)
 
-      if (!userSnap.exists()) {
-        setError("You are not registered as admin")
-        await signOut(auth)
-        return
-      }
-
-      const userData = userSnap.data()
-      if (userData.role !== "admin") {
+      if (!userSnap.exists() || userSnap.data().role !== "admin") {
         setError("You do not have admin privileges")
         await signOut(auth)
         return
       }
 
-
-      // Redirect to admin dashboard
-      router.push("/clients/admin")
+      // 3️⃣ Redirect to admin dashboard
+      router.replace("/clients/admin")
     } catch (err: any) {
       if (err.code === "auth/user-not-found") {
         setError("Email not found")
@@ -82,7 +77,9 @@ export function AdminLoginForm({
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
         <CardHeader className="text-center">
-          <CardTitle className="text-2xl md:text-3xl lg:text-4xl font-bold">Admin Login</CardTitle>
+          <CardTitle className="text-2xl md:text-3xl lg:text-4xl font-bold">
+            Admin Login
+          </CardTitle>
           <CardDescription>
             Enter your credentials below to login to your admin account
           </CardDescription>

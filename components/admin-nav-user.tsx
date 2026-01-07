@@ -1,11 +1,10 @@
 "use client"
 
-import { signOut } from "firebase/auth"
+import { signOut, onAuthStateChanged } from "firebase/auth"
 import { auth, db } from "@/lib/firebaseConfig"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { onAuthStateChanged } from "firebase/auth"
-import { doc, getDoc, deleteDoc } from "firebase/firestore"
+import { doc, getDoc } from "firebase/firestore"
 import {
   ChevronsUpDown,
   LogOut,
@@ -43,32 +42,35 @@ export function AdminNavUser() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
-      if (authUser) {
-        try {
-          const usersRef = doc(db, "users", authUser.uid)
-          const usersSnap = await getDoc(usersRef)
-          if (usersSnap.exists()) {
-            const data = usersSnap.data()
-            setUser({
-              name: data.name,
-              email: authUser.email || "admin@tup.edu.ph",
-              avatar: "/avatars/shadcn.jpg",
-            })
-          }
-        } catch (err) {
-          console.warn("Could not fetch admin profile:", err)
-        }
+      if (!authUser) {
+        router.replace("/clients/admin/login")
+        return
       }
+
+      const usersRef = doc(db, "users", authUser.uid)
+      const usersSnap = await getDoc(usersRef)
+
+      if (!usersSnap.exists() || usersSnap.data().role !== "admin") {
+        await signOut(auth)
+        router.replace("/clients/admin/login")
+        return
+      }
+
+      const data = usersSnap.data()
+      setUser({
+        name: data.name,
+        email: authUser.email || "admin@tup.edu.ph",
+        avatar: "/avatars/shadcn.jpg",
+      })
     })
 
     return () => unsubscribe()
-  }, [])
+  }, [router])
 
   const handleLogout = async () => {
     try {
       await signOut(auth)
-      console.log("Admin logged out successfully")
-      router.push("/clients/admin/login")
+      router.replace("/clients/admin/login")
     } catch (err) {
       console.error("Logout error:", err)
     }

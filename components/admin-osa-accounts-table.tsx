@@ -12,7 +12,7 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogHeader, AlertDialogTitle } from "@/components/ui/alert-dialog"
-import { EditOsaAccountDialog } from "@/components/edit-osa-account-dialog"
+import { EditOsaAccountDialog } from "@/components/admin-edit-osa-account-dialog"
 import { OsaAccount } from "@/components/admin-manage-osa-accounts"
 
 interface OsaAccountsTableProps {
@@ -36,7 +36,7 @@ export function OsaAccountsTable({ accounts, loading, onAccountsChanged }: OsaAc
 
   setDeleting(true)
   try {
-    const response = await fetch("/clients/admin/api/delete-osa", {
+    const response = await fetch("/api/admin/delete-osa", {
       method: "POST",
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({
