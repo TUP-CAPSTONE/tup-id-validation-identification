@@ -47,7 +47,7 @@ export function AdminLoginForm({
       const userSnap = await getDoc(userRef)
 
       if (!userSnap.exists()) {
-        setError("You are not registered as staff")
+        setError("You are not registered as admin")
         await signOut(auth)
         return
       }
