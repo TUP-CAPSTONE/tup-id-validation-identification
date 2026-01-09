@@ -12,9 +12,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import { createUserWithEmailAndPassword } from "firebase/auth"
-import { setDoc, doc, serverTimestamp } from "firebase/firestore"
-import { auth, db } from "@/lib/firebaseConfig"
 
 interface CreateOsaAccountDialogProps {
   open: boolean
@@ -40,63 +37,42 @@ export function CreateOsaAccountDialog({
     e.preventDefault()
     setError("")
 
-    // Validation
-    if (!name.trim()) {
-      setError("Name is required")
-      return
-    }
-    if (!email.trim()) {
-      setError("Email is required")
-      return
-    }
-    if (!password) {
-      setError("Password is required")
-      return
-    }
-    if (password.length < 6) {
-      setError("Password must be at least 6 characters")
-      return
-    }
-    if (password !== confirmPassword) {
-      setError("Passwords do not match")
-      return
-    }
+    if (!name.trim()) return setError("Name is required")
+    if (!email.trim()) return setError("Email is required")
+    if (!password) return setError("Password is required")
+    if (password.length < 6)
+      return setError("Password must be at least 6 characters")
+    if (password !== confirmPassword)
+      return setError("Passwords do not match")
 
     setLoading(true)
 
     try {
-      // Create Firebase Auth user
-      const userCredential = await createUserWithEmailAndPassword(auth, email, password)
-      const user = userCredential.user
-
-      // Create user document in Firestore
-      await setDoc(doc(db, "users", user.uid), {
-        name: name.trim(),
-        email: email.trim(),
-        role: "OSA",
-        createdAt: serverTimestamp(),
+      const res = await fetch("/api/admin/create-osa", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          name: name.trim(),
+          email: email.trim(),
+          password,
+        }),
       })
 
-      // Reset form
+      const data = await res.json()
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to create account")
+      }
+
       setName("")
       setEmail("")
       setPassword("")
       setConfirmPassword("")
 
-      // Close dialog and refresh
       onOpenChange(false)
       onAccountCreated()
     } catch (err: any) {
-      if (err.code === "auth/email-already-in-use") {
-        setError("Email is already in use")
-      } else if (err.code === "auth/invalid-email") {
-        setError("Invalid email address")
-      } else if (err.code === "auth/weak-password") {
-        setError("Password is too weak")
-      } else {
-        setError("Failed to create account. Please try again.")
-      }
-      console.error("Error creating account:", err)
+      setError(err.message)
     } finally {
       setLoading(false)
     }
@@ -105,13 +81,15 @@ export function CreateOsaAccountDialog({
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
       <div onClick={() => onOpenChange(true)}>{children}</div>
+
       <DialogContent className="sm:max-w-md">
         <DialogHeader>
           <DialogTitle>Create OSA Account</DialogTitle>
           <DialogDescription>
-            Create a new OSA staff account with email and password
+            Create a new OSA staff account
           </DialogDescription>
         </DialogHeader>
+
         <form onSubmit={handleCreateAccount} className="space-y-4">
           {error && (
             <div className="p-3 rounded-md bg-red-50 border border-red-200 text-red-700 text-sm">
@@ -120,66 +98,47 @@ export function CreateOsaAccountDialog({
           )}
 
           <div className="space-y-2">
-            <Label htmlFor="name">Full Name</Label>
-            <Input
-              id="name"
-              placeholder="John Doe"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              disabled={loading}
-            />
+            <Label>Full Name</Label>
+            <Input value={name} onChange={(e) => setName(e.target.value)} />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="email">Email</Label>
+            <Label>Email</Label>
             <Input
-              id="email"
               type="email"
-              placeholder="osa@tup.edu.ph"
               value={email}
               onChange={(e) => setEmail(e.target.value)}
-              disabled={loading}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="password">Password</Label>
+            <Label>Password</Label>
             <Input
-              id="password"
               type="password"
-              placeholder="••••••••"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              disabled={loading}
             />
           </div>
 
           <div className="space-y-2">
-            <Label htmlFor="confirmPassword">Confirm Password</Label>
+            <Label>Confirm Password</Label>
             <Input
-              id="confirmPassword"
               type="password"
-              placeholder="••••••••"
               value={confirmPassword}
               onChange={(e) => setConfirmPassword(e.target.value)}
-              disabled={loading}
             />
           </div>
 
-          <div className="flex gap-3 justify-end pt-4">
+          <div className="flex justify-end gap-3 pt-4">
             <Button
               type="button"
               variant="outline"
               onClick={() => onOpenChange(false)}
-              disabled={loading}
             >
               Cancel
             </Button>
-            <Button
-              type="submit"
-              disabled={loading}
-              className="gap-2"
-            >
+
+            <Button type="submit" disabled={loading} className="gap-2">
               {loading && <Loader2 className="w-4 h-4 animate-spin" />}
               Create Account
             </Button>

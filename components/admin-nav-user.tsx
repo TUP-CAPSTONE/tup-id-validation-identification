@@ -1,10 +1,9 @@
 "use client"
 
 import { signOut, onAuthStateChanged } from "firebase/auth"
-import { auth, db } from "@/lib/firebaseConfig"
+import { auth } from "@/lib/firebaseConfig"
 import { useRouter } from "next/navigation"
 import { useEffect, useState } from "react"
-import { doc, getDoc } from "firebase/firestore"
 import {
   ChevronsUpDown,
   LogOut,
@@ -47,21 +46,37 @@ export function AdminNavUser() {
         return
       }
 
-      const usersRef = doc(db, "users", authUser.uid)
-      const usersSnap = await getDoc(usersRef)
+      try {
+        /**
+         * 🔐 Verify admin role via Admin SDK
+         */
+        const token = await authUser.getIdToken(true)
 
-      if (!usersSnap.exists() || usersSnap.data().role !== "admin") {
+        const res = await fetch("/api/admin/login", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ token }),
+        })
+
+        if (!res.ok) {
+          await signOut(auth)
+          router.replace("/clients/admin/login")
+          return
+        }
+
+        /**
+         * ✅ Authorized admin
+         */
+        setUser({
+          name: authUser.displayName || "Admin",
+          email: authUser.email || "admin@tup.edu.ph",
+          avatar: "/avatars/shadcn.jpg",
+        })
+      } catch (err) {
+        console.error("Admin verification failed:", err)
         await signOut(auth)
         router.replace("/clients/admin/login")
-        return
       }
-
-      const data = usersSnap.data()
-      setUser({
-        name: data.name,
-        email: authUser.email || "admin@tup.edu.ph",
-        avatar: "/avatars/shadcn.jpg",
-      })
     })
 
     return () => unsubscribe()
@@ -97,6 +112,7 @@ export function AdminNavUser() {
               <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
+
           <DropdownMenuContent
             suppressHydrationWarning
             className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
@@ -116,7 +132,9 @@ export function AdminNavUser() {
                 </div>
               </div>
             </DropdownMenuLabel>
+
             <DropdownMenuSeparator />
+
             <DropdownMenuGroup>
               <DropdownMenuItem onClick={handleLogout}>
                 <LogOut className="mr-2 h-4 w-4" />

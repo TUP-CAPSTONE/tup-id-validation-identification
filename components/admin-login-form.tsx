@@ -17,9 +17,11 @@ import {
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
 import { useState } from "react"
-import { signInWithEmailAndPassword, signOut } from "firebase/auth"
-import { auth, db } from "@/lib/firebaseConfig"
-import { doc, getDoc } from "firebase/firestore"
+import {
+  signInWithEmailAndPassword,
+  signOut,
+} from "firebase/auth"
+import { auth } from "@/lib/firebaseConfig"
 import { useRouter } from "next/navigation"
 
 export function AdminLoginForm({
@@ -38,36 +40,41 @@ export function AdminLoginForm({
     setLoading(true)
 
     try {
-      // 1️⃣ Firebase Auth login
+      /**
+       * 1️⃣ Firebase Auth sign-in
+       */
       const { user } = await signInWithEmailAndPassword(
         auth,
         email,
         password
       )
 
-      // 2️⃣ Firestore role check
-      const userRef = doc(db, "users", user.uid)
-      const userSnap = await getDoc(userRef)
+      /**
+       * 2️⃣ Get ID token
+       */
+      const token = await user.getIdToken(true)
 
-      if (!userSnap.exists() || userSnap.data().role !== "admin") {
-        setError("You do not have admin privileges")
+      /**
+       * 3️⃣ Verify admin role via Admin SDK
+       */
+      const res = await fetch("/api/admin/login", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ token }),
+      })
+
+      if (!res.ok) {
         await signOut(auth)
-        return
+        throw new Error("You do not have admin privileges")
       }
 
-      // 3️⃣ Redirect to admin dashboard
+      /**
+       * 4️⃣ Success → redirect
+       */
       router.replace("/clients/admin")
     } catch (err: any) {
-      if (err.code === "auth/user-not-found") {
-        setError("Email not found")
-      } else if (err.code === "auth/wrong-password") {
-        setError("Invalid password")
-      } else if (err.code === "auth/invalid-email") {
-        setError("Invalid email address")
-      } else {
-        setError("Login failed. Please try again.")
-      }
-      console.error("Login error:", err)
+      console.error("Admin login error:", err)
+      setError("Invalid email or password")
     } finally {
       setLoading(false)
     }
@@ -105,9 +112,7 @@ export function AdminLoginForm({
                 />
               </Field>
               <Field>
-                <div className="flex items-center">
-                  <FieldLabel htmlFor="password">Password</FieldLabel>
-                </div>
+                <FieldLabel htmlFor="password">Password</FieldLabel>
                 <Input
                   id="password"
                   type="password"
