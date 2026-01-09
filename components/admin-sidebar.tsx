@@ -58,7 +58,7 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
 
           {/* Student Management Section */}
           <SidebarMenuItem>
-            <Link href="/clients/admin/manage-registrations">
+            <Link href="/clients/admin/dashboard/manage-registrations">
               <SidebarMenuButton
                 className={cn(
                   "rounded-md transition-colors h-12",
