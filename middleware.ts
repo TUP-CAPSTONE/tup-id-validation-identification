@@ -6,22 +6,34 @@ export function middleware(req: NextRequest) {
 
   const isAdminPage = pathname.startsWith("/clients/admin")
   const isAdminApi = pathname.startsWith("/api/admin")
-  const isLoginPage = pathname === "/clients/admin/login"
 
-  const isLoggedIn =
-    req.cookies.get("firebase:authUser") ||
-    req.cookies.get("__session")
+  const isAdminLoginPage = pathname === "/clients/admin/login"
+  const isAdminLoginApi = pathname === "/api/admin/login"
 
-  // 🚫 API: return 401, DO NOT redirect
-  if (isAdminApi && !isLoggedIn) {
+  const adminSession = req.cookies.get("admin_session")
+
+  /**
+   * ✅ ALWAYS allow admin login routes
+   */
+  if (isAdminLoginPage || isAdminLoginApi) {
+    return NextResponse.next()
+  }
+
+  /**
+   * 🚫 Block admin APIs if not logged in
+   * (NO redirects for APIs)
+   */
+  if (isAdminApi && !adminSession) {
     return NextResponse.json(
       { error: "Unauthorized" },
       { status: 401 }
     )
   }
 
-  // ✅ Pages: redirect to login
-  if (isAdminPage && !isLoginPage && !isLoggedIn) {
+  /**
+   * 🔒 Protect admin pages
+   */
+  if (isAdminPage && !adminSession) {
     return NextResponse.redirect(
       new URL("/clients/admin/login", req.url)
     )

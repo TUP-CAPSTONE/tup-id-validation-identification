@@ -1,59 +1,65 @@
 "use client"
 
-
 import { useEffect, useState } from "react"
 import { collection, getDocs, orderBy, query } from "firebase/firestore"
 import { db } from "@/lib/firebaseConfig"
 import { RegistrationRequestsTable } from "@/components/admin-registration-requests-table"
 
-
 export interface RegistrationRequest {
-    id: string
-    fullName: string
-    studentNumber: string
-    email: string
-    createdAt: any
-    status: "pending" | "accepted" | "rejected"
-    remarks?: string
-    [key: string]: any
+  id: string
+  firstName: string
+  lastName: string
+  fullName: string
+  studentNumber: string
+  email: string
+  course: string
+  yearLevel: number
+  section: string
+  phone: string
+  uid: string
+  requestedAt: any
+  status: "Pending" | "Accepted" | "Rejected"
+  remarks?: string | null
+  reviewedBy?: string | null
 }
-
 
 export function ManageRegistrationRequests() {
-const [requests, setRequests] = useState<RegistrationRequest[]>([])
-const [loading, setLoading] = useState(true)
+  const [requests, setRequests] = useState<RegistrationRequest[]>([])
+  const [loading, setLoading] = useState(true)
 
-
-const fetchRequests = async () => {
+  const fetchRequests = async () => {
     setLoading(true)
+
     const q = query(
-    collection(db, "registration_requests2"),
-    orderBy("createdAt", "desc")
-)
-const snap = await getDocs(q)
+      collection(db, "registration_requests"),
+      orderBy("requestedAt", "desc")
+    )
 
+    const snap = await getDocs(q)
 
-const data: RegistrationRequest[] = snap.docs.map((doc) => ({
-    id: doc.id,
-    ...doc.data(),
-})) as RegistrationRequest[]
+    const data: RegistrationRequest[] = snap.docs.map((doc) => {
+      const d = doc.data()
 
+      return {
+        id: doc.id,
+        ...d,
+        fullName: `${d.firstName} ${d.lastName}`,
+      }
+    }) as RegistrationRequest[]
 
-setRequests(data)
-setLoading(false)
-}
+    setRequests(data)
+    setLoading(false)
+  }
 
+  useEffect(() => {
+    fetchRequests()
+  }, [])
 
-useEffect(() => {
-fetchRequests()
-}, [])
-
-
-return (
+  return (
     <RegistrationRequestsTable
-        requests={requests}
-        loading={loading}
-        onRequestsChanged={fetchRequests}
+      requests={requests}
+      loading={loading}
+      onRequestsChanged={fetchRequests}
     />
-)
+  )
 }

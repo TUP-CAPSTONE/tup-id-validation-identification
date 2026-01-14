@@ -9,7 +9,7 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Missing fields" }, { status: 400 })
     }
 
-    const requestRef = adminDB.collection("registration_requests2").doc(requestId)
+    const requestRef = adminDB.collection("registration_requests").doc(requestId)
     const snap = await requestRef.get()
 
     if (!snap.exists) {
@@ -17,7 +17,7 @@ export async function POST(req: Request) {
     }
 
     await requestRef.update({
-      status: "rejected",
+      status: "Rejected",
       remarks,
       processedAt: new Date(),
     })
