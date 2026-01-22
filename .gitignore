@@ -40,3 +40,8 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+
+# dummy data injector script
+/inject.js
+/tup-id-verification-firebase-adminsdk-fbsvc-e60592d188.json
