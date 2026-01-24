@@ -25,8 +25,8 @@ import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
 // Firestore collection constants
-const STUDENTS_COLLECTION = "students";
-const REG_REQUESTS_COLLECTION = "registrationRequests";
+const STUDENTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_STUDENTS_COLLECTION || "students";
+const REG_REQUESTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_REG_REQUESTS_COLLECTION || "registration_requests";
 
 export function StudentLoginForm({ className, ...props }: React.ComponentProps<"div">) {
   const router = useRouter();
@@ -175,54 +175,111 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
   };
 
   return (
-    <div className={cn("flex flex-col gap-6", className)} {...props}>
-      <Card>
-        <CardHeader className="text-center">
-          <CardTitle className="text-2xl md:text-3xl lg:text-4xl font-bold">Student Login</CardTitle>
-          <CardDescription>{currentUser && !checkingAuth ? "You are already signed in" : "Sign in with your email or student ID"}</CardDescription>
-        </CardHeader>
-        <CardContent>
-          <FieldGroup>
+    <div className={cn("w-full bg-white", className)} {...props}>
+      <div className="bg-white rounded-lg border border-red-100 shadow-md overflow-hidden">
+        {/* Form Header Section */}
+        <div className="bg-gradient-to-r from-red-50 to-red-25 border-b border-red-100 px-6 md:px-8 py-6">
+          <h2 className="text-2xl md:text-3xl font-bold text-[#b32032] tracking-tight mb-2">Welcome Back</h2>
+          <p className="text-sm text-gray-600">{currentUser && !checkingAuth ? "You are already signed in" : "Sign in to access your student account"}</p>
+        </div>
+
+        {/* Form Content */}
+        <div className="px-6 md:px-8 py-8">
+          <FieldGroup className="space-y-6">
             {error && (
-              <Alert variant="destructive" className="mb-4">
+              <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
                 <AlertDescription>{error}</AlertDescription>
-              </Alert>
+              </div>
             )}
 
             {currentUser && !checkingAuth && (
-              <div className="mb-6 p-4 bg-green-50 rounded-lg border border-green-200">
-                <p className="text-sm text-green-800 mb-3"><strong>Currently signed in as:</strong></p>
-                <div className="bg-white rounded p-3 mb-3">
-                  <p className="font-semibold text-gray-800">{currentUser.firstName} {currentUser.lastName}</p>
-                  <p className="text-sm text-gray-600">{currentUser.email}</p>
+              <div className="p-5 bg-green-50 rounded-lg border border-green-200 space-y-4">
+                <p className="text-sm font-semibold text-green-800 flex items-center">
+                  <span className="w-2 h-2 rounded-full bg-green-600 mr-2"></span>
+                  Currently signed in as:
+                </p>
+                <div className="bg-white rounded-lg p-4 border border-green-100">
+                  <p className="font-semibold text-gray-900">{currentUser.firstName} {currentUser.lastName}</p>
+                  <p className="text-sm text-gray-600 mt-1">{currentUser.email}</p>
                 </div>
-                <div className="flex gap-2">
-                  <Button onClick={handleContinueAsUser} className="flex-1" variant="default">Continue as this user</Button>
-                  <Button onClick={handleLogoutAndLogin} className="flex-1" variant="outline">Sign in as different user</Button>
+                <div className="flex gap-3 pt-2">
+                  <Button 
+                    onClick={handleContinueAsUser} 
+                    className="flex-1 bg-[#b32032] hover:bg-[#951928] text-white font-medium"
+                  >
+                    Continue as this user
+                  </Button>
+                  <Button 
+                    onClick={handleLogoutAndLogin} 
+                    className="flex-1 border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium"
+                    variant="outline"
+                  >
+                    Sign in differently
+                  </Button>
                 </div>
               </div>
             )}
 
             {!currentUser && !checkingAuth && (
               <>
-                <Field>
-                  <FieldLabel htmlFor="emailOrStudentId">Email or Student ID</FieldLabel>
-                  <Input
-                    id="emailOrStudentId"
-                    type="text"
-                    placeholder="student@tup.edu.ph or TUPM-22-1234"
-                    value={formData.emailOrStudentId}
-                    onChange={(e) => setFormData({ ...formData, emailOrStudentId: e.target.value })}
-                    disabled={loading}
-                    required
-                  />
-                  <FieldDescription>Enter your email address or student ID</FieldDescription>
-                </Field>
+                <div className="space-y-5">
+                  <Field>
+                    <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="emailOrStudentId">
+                      Email or Student ID *
+                    </FieldLabel>
+                    <Input
+                      id="emailOrStudentId"
+                      type="text"
+                      placeholder="student@tup.edu.ph or TUPM-22-1234"
+                      value={formData.emailOrStudentId}
+                      onChange={(e) => setFormData({ ...formData, emailOrStudentId: e.target.value })}
+                      disabled={loading}
+                      className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
+                      required
+                    />
+                    <FieldDescription className="text-xs text-gray-500 mt-1">
+                      Enter your email address or student ID
+                    </FieldDescription>
+                  </Field>
 
-                <Field>
-                  <div className="flex items-center">
-                    <FieldLabel htmlFor="password">Password</FieldLabel>
-                    <a href="/clients/students/forgot" className="ml-auto inline-block text-sm underline-offset-4 hover:underline">Forgot your password?</a>
+                  <Field>
+                    <div className="flex items-center justify-between mb-2">
+                      <FieldLabel className="text-sm font-semibold text-gray-700" htmlFor="password">
+                        Password *
+                      </FieldLabel>
+                      <a 
+                        href="/clients/students/forgot" 
+                        className="text-xs font-medium text-[#b32032] hover:text-[#8b1828] transition"
+                      >
+                        Forgot password?
+                      </a>
+                    </div>
+                    <Input
+                      id="password"
+                      type="password"
+                      placeholder="Enter your password"
+                      value={formData.password}
+                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
+                      disabled={loading}
+                      className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
+                      required
+                    />
+                  </Field>
+                </div>
+
+                {/* Login Button */}
+                <Button 
+                  onClick={handleSubmit} 
+                  disabled={loading} 
+                  className="w-full h-10 bg-[#b32032] hover:bg-[#951928] text-white font-semibold shadow-md hover:shadow-lg transition"
+                >
+                  {loading ? "Signing in..." : "Sign In"}
+                </Button>
+
+                {/* Divider */}
+                <div className="relative">
+                  <div className="absolute inset-0 flex items-center">
+                    <div className="w-full border-t border-gray-200"></div>
                   </div>
                   <Input
                     id="password"
@@ -241,16 +298,19 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
                   <FieldDescription className="text-center mt-4">
                     Don't have an account? <a href="/clients/students/register" className="underline underline-offset-4 hover:text-primary font-semibold">Sign up</a>
                   </FieldDescription>
-                </Field>
+                </div>
               </>
             )}
 
             {checkingAuth && (
-              <div className="text-center py-8"><p className="text-gray-600">Checking authentication...</p></div>
+              <div className="flex flex-col items-center justify-center py-12">
+                <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-[#b32032] mb-4"></div>
+                <p className="text-gray-600 text-sm">Checking authentication...</p>
+              </div>
             )}
           </FieldGroup>
-        </CardContent>
-      </Card>
+        </div>
+      </div>
     </div>
   );
 }

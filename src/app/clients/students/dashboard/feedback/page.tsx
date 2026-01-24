@@ -1,34 +1,33 @@
+"use client";
+
 import { AppSidebar } from "@/components/student-app-sidebar";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { SidebarInset, SidebarProvider } from "@/components/ui/sidebar";
 import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbList,
   BreadcrumbPage,
-} from "@/components/ui/breadcrumb"
-import { Separator } from "@/components/ui/separator";
+} from "@/components/ui/breadcrumb";
+import StudentFeedback from "@/components/student-feedback";
 
 export default function FeedbackPage() {
   return (
     <SidebarProvider>
       <AppSidebar />
       <SidebarInset>
-        <header className="bg-background sticky top-0 flex h-16 shrink-0 items-center gap-2 border-b px-4">
-          <SidebarTrigger className="-ml-1" />
-          <Separator
-            orientation="vertical"
-            className="mr-2 data-[orientation=vertical]:h-4"
-          />
+        <header className="bg-gradient-to-b from-[#c62c3f] to-[#b32032] text-white sticky top-0 flex h-20 items-center justify-center shadow-md px-4">
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage className="text-lg">Give Feedback</BreadcrumbPage>
+                <BreadcrumbPage className="text-3xl md:text-4xl font-bold tracking-tight text-white drop-shadow-sm">Give Feedback</BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
         </header>
-        <div className="flex flex-1 flex-col gap-4 p-4">
-          <h1>Feedback</h1>
+        <div className="flex flex-1 flex-col gap-4 p-6">
+          <div className="mx-auto w-full max-w-6xl">
+            <StudentFeedback />
+          </div>
         </div>
       </SidebarInset>
     </SidebarProvider>
