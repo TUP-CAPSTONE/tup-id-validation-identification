@@ -2,7 +2,7 @@
 
 import React, { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebaseConfig";
-import { signInWithEmailAndPassword, onAuthStateChanged, signOut } from "firebase/auth";
+import { signInWithEmailAndPassword, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { doc, getDoc, collection, query, where, getDocs } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
@@ -150,6 +150,30 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
     router.replace("/clients/students/login");
   };
 
+  const handleGoogleLogin = async () => {
+    setError("");
+    setLoading(true);
+    try {
+      const provider = new GoogleAuthProvider();
+      await signInWithPopup(auth, provider);
+      // onAuthStateChanged will handle redirect
+    } catch (err) {
+      const e: any = err;
+      if (e?.code === "auth/popup-closed-by-user") {
+        setError("Sign-in cancelled. Please try again.");
+      } else if (e?.code === "auth/popup-blocked") {
+        setError("Pop-up blocked. Please allow pop-ups for this site.");
+      } else if (e?.code === "auth/cancelled-popup-request") {
+        // User closed popup, no error needed
+        setError("");
+      } else {
+        setError(e?.message || "Google sign-in failed. Please try again.");
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
   return (
     <div className={cn("flex flex-col gap-6", className)} {...props}>
       <Card>
@@ -213,7 +237,7 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
 
                 <Field>
                   <Button onClick={handleSubmit} disabled={loading} className="w-full">{loading ? "Logging in..." : "Login"}</Button>
-                  <Button variant="outline" type="button" disabled={loading} className="w-full">Login with Google</Button>
+                  <Button variant="outline" type="button" disabled={loading} className="w-full" onClick={handleGoogleLogin}>Login with Google</Button>
                   <FieldDescription className="text-center mt-4">
                     Don't have an account? <a href="/clients/students/register" className="underline underline-offset-4 hover:text-primary font-semibold">Sign up</a>
                   </FieldDescription>
