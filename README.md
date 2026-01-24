@@ -25,6 +25,8 @@ This project requires Firebase for authentication and data storage. Before runni
    - `NEXT_PUBLIC_FIREBASE_APP_ID` - Your Firebase app ID
    - `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` - Your Firebase measurement ID (optional)
 
+> **Note:** Make sure your Firebase project is properly configured with Authentication and Firestore enabled before running the application.
+
 ### Running the Development Server
 
 First, run the development server:
