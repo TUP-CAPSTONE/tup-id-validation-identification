@@ -1,67 +1,60 @@
-import { AppSidebar } from "@/components/osa-app-sidebar";
-import { SidebarInset, SidebarProvider, SidebarTrigger } from "@/components/ui/sidebar";
+import { AppSidebar } from "@/components/osa-app-sidebar"
+import {
+  SidebarInset,
+  SidebarProvider,
+  SidebarTrigger,
+} from "@/components/ui/sidebar"
 import {
   Breadcrumb,
   BreadcrumbItem,
   BreadcrumbList,
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb"
-import { Separator } from "@/components/ui/separator";
-import { columns, Requests } from "@/components/osa-columns"
-import { DataTable } from "@/components/osa-data-table"
+import { Separator } from "@/components/ui/separator"
+
 import { db } from "@/lib/firebaseConfig"
 import { collection, getDocs } from "firebase/firestore"
 
-async function getData(): Promise<Requests[]> {
-  try {
-    const requestsCollection = collection(db, "validation_requests")
-    const snapshot = await getDocs(requestsCollection)
-    
-    const data: Requests[] = snapshot.docs.map((doc) => ({
-      requestId: doc.data().requestId,
-      studentId: doc.data().studentId,
-      studentName: doc.data().studentName,
-      tupId: doc.data().tupId,
-      email: doc.data().email,
-      phoneNumber: doc.data().phoneNumber,
-      idPicture: doc.data().idPicture,
-      selfiePictures: doc.data().selfiePictures,
-      status: doc.data().status,
-      requestTime: doc.data().requestTime,
-    }))
-    
-    return data
-  } catch (error) {
-    console.error("Error fetching data from Firestore:", error)
-    return []
-  }
+import {
+  IdValidationTable,
+  ValidationRequest,
+} from "@/components/osa-id-validation-table"
+
+async function getRequests(): Promise<ValidationRequest[]> {
+  const snapshot = await getDocs(collection(db, "validation_requests"))
+  return snapshot.docs.map((doc) => doc.data()) as ValidationRequest[]
 }
 
 export default async function ValidationPage() {
-  const data = await getData()
+  const requests = await getRequests()
 
   return (
-    <SidebarProvider>
+    <SidebarProvider
+      style={{
+        "--sidebar-width": "20rem", // This matches your w-80 (20rem) sidebar
+      } as React.CSSProperties}
+    >
       <AppSidebar />
       <SidebarInset>
-        <header className="bg-background sticky top-0 flex h-16 shrink-0 items-center gap-2 border-b px-4">
+        <header className="sticky top-0 flex h-16 items-center gap-2 border-b px-4 bg-background z-10">
           <SidebarTrigger className="-ml-1" />
-          <Separator
-            orientation="vertical"
-            className="mr-2 data-[orientation=vertical]:h-4"
-          />
+          <Separator orientation="vertical" className="h-4" />
+
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage className="text-lg">Validation Requests</BreadcrumbPage>
+                <BreadcrumbPage className="text-lg">
+                  ID Validation Requests
+                </BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>
         </header>
-        <div className="flex flex-1 flex-col gap-4 p-4">
-          <DataTable columns={columns} data={data} />
+
+        <div className="p-4">
+          <IdValidationTable requests={requests} />
         </div>
       </SidebarInset>
     </SidebarProvider>
-  );
+  )
 }
