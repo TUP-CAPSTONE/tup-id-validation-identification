@@ -1,12 +1,11 @@
-export default function PlaceholderPage() {
+import { LoginForm } from "@/components/osa-login-form"
+
+export default function Page() {
   return (
-    <div className="flex min-h-screen items-center justify-center bg-gray-100">
-      <div className="text-center p-6 bg-black shadow-lg rounded-xl">
-        <h1 className="text-2xl font-semibold mb-2">Page Under Construction</h1>
-        <p className="text-white-600">
-          This page is still being built. Check back soon.
-        </p>
+    <div className="flex min-h-svh w-full items-center justify-center p-6 md:p-10">
+      <div className="w-full max-w-sm">
+        <LoginForm />
       </div>
     </div>
-  );
+  )
 }

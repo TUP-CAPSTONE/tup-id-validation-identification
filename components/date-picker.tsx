@@ -9,7 +9,7 @@ export function DatePicker() {
     <SidebarGroup className="w-250
     ">
       <SidebarGroupContent>
-        <Calendar className="[&_[role=gridcell].bg-accent]:bg-sidebar-primary [&_[role=gridcell].bg-accent]:text-sidebar-primary-foreground [&_[role=gridcell]]:w-[33px]" />
+        <Calendar className="[&_[role=gridcell].bg-accent]:bg-sidebar-primary [&_[role=gridcell].bg-accent]:text-sidebar-primary-foreground **:[[role=gridcell]]:w-8.25" />
       </SidebarGroupContent>
     </SidebarGroup>
   )
