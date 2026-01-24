@@ -526,8 +526,13 @@ export function StudentRegistrationForm({
                     className="w-full"
                     onClick={async () => {
                       // Sign out the user to ensure a clean state
-                      if (auth.currentUser) {
-                        await signOut(auth);
+                      try {
+                        if (auth.currentUser) {
+                          await signOut(auth);
+                        }
+                      } catch (err) {
+                        console.error("Error signing out:", err);
+                        // Continue with form reset even if signOut fails
                       }
                       setShowGoogleForm(false);
                       setGoogleUserData(null);
