@@ -3,7 +3,6 @@
 import * as React from "react";
 import { useEffect, useState } from "react";
 import Link from "next/link";
-import { usePathname } from "next/navigation";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, onSnapshot } from "firebase/firestore";
 import { auth, db } from "@/lib/firebaseConfig";
@@ -12,6 +11,8 @@ import {
   IdCardLanyardIcon,
   UserIcon,
   SendIcon,
+  PanelLeftClose,
+  Paperclip,
 } from "lucide-react"
 
 import { DatePicker } from "@/components/date-picker";
@@ -25,11 +26,10 @@ import {
   SidebarMenuItem,
   SidebarRail,
   SidebarSeparator,
+  SidebarTrigger,
 } from "@/components/ui/sidebar";
-import { cn } from "@/lib/utils";
 
 export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const pathname = usePathname();
   const [userData, setUserData] = useState({
     name: "Loading...",
     email: "Loading...",
@@ -78,21 +78,23 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
   }, []);
 
   return (
-    <Sidebar {...props}>
-      <SidebarHeader className="border-sidebar-border h-16 border-b">
+    <Sidebar 
+      {...props} 
+      variant="sidebar"
+      collapsible="offcanvas"
+      style={{ "--sidebar-width": "280px" } as React.CSSProperties}
+    >
+      <SidebarHeader className="h-20 border-b border-[#dca0ad] bg-gradient-to-b from-[#c62c3f] to-[#b32032] text-white flex flex-row items-center justify-between px-3 shadow-sm">
         <NavUser user={userData} />
+        <SidebarTrigger className="ml-auto size-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition" />
       </SidebarHeader>
-      <SidebarContent className="overflow-hidden">
+      <SidebarContent className="overflow-y-auto overflow-x-hidden">
         <DatePicker />
         <SidebarSeparator className="mx-0" />
         <SidebarMenu>
           <SidebarMenuItem>
             <Link href="/clients/students/dashboard/validation-request">
-              <SidebarMenuButton
-                className={cn(
-                  pathname.includes("validation-request") ? "bg-red-700 text-white" : ""
-                )}
-              >
+              <SidebarMenuButton>
                 <IdCardLanyardIcon />
                 ID Validation Request
               </SidebarMenuButton>
@@ -101,11 +103,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
           <SidebarMenuItem>
             <Link href="/clients/students/dashboard/user-info">
-              <SidebarMenuButton
-                className={cn(
-                  pathname.includes("user-info") ? "bg-red-700 text-white" : ""
-                )}
-              >
+              <SidebarMenuButton>
                 <UserIcon />
                 User Information
               </SidebarMenuButton>
@@ -114,11 +112,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
 
           <SidebarMenuItem>
             <Link href="/clients/students/dashboard/feedback">
-              <SidebarMenuButton
-                className={cn(
-                  pathname.includes("feedback") ? "bg-red-700 text-white" : ""
-                )}
-              >
+              <SidebarMenuButton>
                 <SendIcon />
                 Give Feedback
               </SidebarMenuButton>
@@ -126,7 +120,11 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarContent>
-      <SidebarRail />
+      <SidebarRail className="flex items-center justify-center">
+        <span className="mt-2 mx-auto inline-flex size-8 items-center justify-center rounded-full border border-[#dca0ad] bg-white text-[#b32032] shadow-sm hover:bg-[#fdf1f3]">
+          <Paperclip className="w-4 h-4" />
+        </span>
+      </SidebarRail>
     </Sidebar>
   );
 }

@@ -14,6 +14,7 @@ import {
   TableHeader,
   TableRow,
 } from "@/components/ui/table";
+import { ChevronDown, ChevronUp } from "lucide-react";
 
 interface PendingAccount {
   uid: string;
@@ -32,6 +33,8 @@ export function AdminDashboard() {
   const [error, setError] = useState("");
   const [approving, setApproving] = useState<string | null>(null);
   const [rejecting, setRejecting] = useState<string | null>(null);
+  const [expandedSections, setExpandedSections] = useState<Record<string, boolean>>({});
+  const [isMobile, setIsMobile] = useState(false);
 
   // Collections (use env fallbacks)
   const REG_REQUESTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_REG_REQUESTS_COLLECTION || "registration_requests";
@@ -78,6 +81,51 @@ export function AdminDashboard() {
 
   useEffect(() => {
     fetchPendingAccounts();
+  }, []);
+
+  /**
+   * Expands/collapses sections like "ID Validation Request"
+   */
+  function toggleSection(sectionId: string) {
+    setExpandedSections(prev => ({
+      ...prev,
+      [sectionId]: !prev[sectionId]
+    }));
+  }
+
+  /**
+   * Formats dates consistently
+   */
+  function formatDate(date: any): string {
+    if (!date) return "N/A";
+    
+    try {
+      const dateObj = date.toDate ? date.toDate() : new Date(date);
+      return new Intl.DateTimeFormat('en-US', {
+        year: 'numeric',
+        month: 'short',
+        day: 'numeric',
+        hour: '2-digit',
+        minute: '2-digit'
+      }).format(dateObj);
+    } catch (err) {
+      return "Invalid date";
+    }
+  }
+
+  /**
+   * Makes the calendar/table responsive - detects screen size changes
+   */
+  function handleResize() {
+    const mobile = window.innerWidth < 768;
+    setIsMobile(mobile);
+  }
+
+  // Set up resize listener
+  useEffect(() => {
+    handleResize();
+    window.addEventListener('resize', handleResize);
+    return () => window.removeEventListener('resize', handleResize);
   }, []);
 
   // Approve account
@@ -144,81 +192,146 @@ export function AdminDashboard() {
   return (
     <div className="space-y-6">
       <Card>
-        <CardHeader>
-          <CardTitle className="text-2xl">Pending Account Approvals</CardTitle>
-          <CardDescription>
-            Review and approve new student registration requests
-          </CardDescription>
+        <CardHeader
+          className="cursor-pointer bg-gray-50 hover:bg-gray-100 transition-colors"
+          onClick={() => toggleSection('pendingAccounts')}
+        >
+          <div className="flex items-center justify-between">
+            <div>
+              <CardTitle className="text-2xl">Pending Account Approvals</CardTitle>
+              <CardDescription>
+                Review and approve new student registration requests
+              </CardDescription>
+            </div>
+            <div>
+              {expandedSections['pendingAccounts'] ? (
+                <ChevronUp className="w-5 h-5" />
+              ) : (
+                <ChevronDown className="w-5 h-5" />
+              )}
+            </div>
+          </div>
         </CardHeader>
-        <CardContent className="space-y-4">
-          {error && (
-            <Alert variant="destructive">
-              <AlertDescription>{error}</AlertDescription>
-            </Alert>
-          )}
+        
+        {expandedSections['pendingAccounts'] !== false && (
+          <CardContent className="space-y-4">
+            {error && (
+              <Alert variant="destructive">
+                <AlertDescription>{error}</AlertDescription>
+              </Alert>
+            )}
 
-          {loading ? (
-            <div className="text-center py-8">
-              <p className="text-gray-600">Loading pending accounts...</p>
-            </div>
-          ) : pendingAccounts.length === 0 ? (
-            <div className="text-center py-8">
-              <p className="text-gray-600">No pending accounts at this time</p>
-            </div>
-          ) : (
-            <div className="border rounded-lg overflow-x-auto">
-              <Table>
-                <TableHeader>
-                  <TableRow className="bg-gray-50">
-                    <TableHead>Name</TableHead>
-                    <TableHead>Email</TableHead>
-                    <TableHead>Student ID</TableHead>
-                    <TableHead>Phone</TableHead>
-                    <TableHead>Submitted</TableHead>
-                    <TableHead className="text-right">Actions</TableHead>
-                  </TableRow>
-                </TableHeader>
-                <TableBody>
-                  {pendingAccounts.map((account) => (
-                    <TableRow key={account.uid} className="hover:bg-gray-50">
-                      <TableCell className="font-medium">
-                        {account.firstName} {account.lastName}
-                      </TableCell>
-                      <TableCell>{account.email}</TableCell>
-                      <TableCell>{account.studentId}</TableCell>
-                      <TableCell>{account.phone || "N/A"}</TableCell>
-                      <TableCell>
-                        {account.createdAt
-                          ? new Date(account.createdAt.toDate()).toLocaleDateString()
-                          : "N/A"}
-                      </TableCell>
-                      <TableCell className="text-right">
-                        <div className="flex gap-2 justify-end">
-                          <Button
-                            onClick={() => handleApprove(account)}
-                            disabled={approving === account.uid || rejecting === account.uid}
-                            size="sm"
-                            className="bg-green-600 hover:bg-green-700"
-                          >
-                            {approving === account.uid ? "Approving..." : "Approve"}
-                          </Button>
-                          <Button
-                            onClick={() => handleReject(account)}
-                            disabled={approving === account.uid || rejecting === account.uid}
-                            size="sm"
-                            variant="destructive"
-                          >
-                            {rejecting === account.uid ? "Rejecting..." : "Reject"}
-                          </Button>
-                        </div>
-                      </TableCell>
-                    </TableRow>
-                  ))}
-                </TableBody>
-              </Table>
-            </div>
-          )}
-        </CardContent>
+            {loading ? (
+              <div className="text-center py-8">
+                <p className="text-gray-600">Loading pending accounts...</p>
+              </div>
+            ) : pendingAccounts.length === 0 ? (
+              <div className="text-center py-8">
+                <p className="text-gray-600">No pending accounts at this time</p>
+              </div>
+            ) : (
+              <div className={`${isMobile ? 'space-y-4' : 'border rounded-lg overflow-x-auto'}`}>
+                {isMobile ? (
+                  // Mobile view - card layout
+                  <div className="space-y-3">
+                    {pendingAccounts.map((account) => (
+                      <Card key={account.uid} className="border-gray-200">
+                        <CardContent className="pt-6 space-y-3">
+                          <div>
+                            <p className="text-xs text-gray-500">Name</p>
+                            <p className="font-semibold">{account.firstName} {account.lastName}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Email</p>
+                            <p className="text-sm">{account.email}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Student ID</p>
+                            <p className="text-sm">{account.studentId}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Phone</p>
+                            <p className="text-sm">{account.phone || "N/A"}</p>
+                          </div>
+                          <div>
+                            <p className="text-xs text-gray-500">Submitted</p>
+                            <p className="text-sm">{formatDate(account.createdAt)}</p>
+                          </div>
+                          <div className="flex gap-2 pt-2">
+                            <Button
+                              onClick={() => handleApprove(account)}
+                              disabled={approving === account.uid || rejecting === account.uid}
+                              size="sm"
+                              className="flex-1 bg-green-600 hover:bg-green-700"
+                            >
+                              {approving === account.uid ? "Approving..." : "Approve"}
+                            </Button>
+                            <Button
+                              onClick={() => handleReject(account)}
+                              disabled={approving === account.uid || rejecting === account.uid}
+                              size="sm"
+                              variant="destructive"
+                              className="flex-1"
+                            >
+                              {rejecting === account.uid ? "Rejecting..." : "Reject"}
+                            </Button>
+                          </div>
+                        </CardContent>
+                      </Card>
+                    ))}
+                  </div>
+                ) : (
+                  // Desktop view - table layout
+                  <Table>
+                    <TableHeader>
+                      <TableRow className="bg-gray-50">
+                        <TableHead>Name</TableHead>
+                        <TableHead>Email</TableHead>
+                        <TableHead>Student ID</TableHead>
+                        <TableHead>Phone</TableHead>
+                        <TableHead>Submitted</TableHead>
+                        <TableHead className="text-right">Actions</TableHead>
+                      </TableRow>
+                    </TableHeader>
+                    <TableBody>
+                      {pendingAccounts.map((account) => (
+                        <TableRow key={account.uid} className="hover:bg-gray-50">
+                          <TableCell className="font-medium">
+                            {account.firstName} {account.lastName}
+                          </TableCell>
+                          <TableCell>{account.email}</TableCell>
+                          <TableCell>{account.studentId}</TableCell>
+                          <TableCell>{account.phone || "N/A"}</TableCell>
+                          <TableCell>{formatDate(account.createdAt)}</TableCell>
+                          <TableCell className="text-right">
+                            <div className="flex gap-2 justify-end">
+                              <Button
+                                onClick={() => handleApprove(account)}
+                                disabled={approving === account.uid || rejecting === account.uid}
+                                size="sm"
+                                className="bg-green-600 hover:bg-green-700"
+                              >
+                                {approving === account.uid ? "Approving..." : "Approve"}
+                              </Button>
+                              <Button
+                                onClick={() => handleReject(account)}
+                                disabled={approving === account.uid || rejecting === account.uid}
+                                size="sm"
+                                variant="destructive"
+                              >
+                                {rejecting === account.uid ? "Rejecting..." : "Reject"}
+                              </Button>
+                            </div>
+                          </TableCell>
+                        </TableRow>
+                      ))}
+                    </TableBody>
+                  </Table>
+                )}
+              </div>
+            )}
+          </CardContent>
+        )}
       </Card>
     </div>
   );
