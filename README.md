@@ -2,6 +2,31 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
+### Environment Setup
+
+This project requires Firebase for authentication and data storage. Before running the application, you need to set up your environment variables:
+
+1. Copy the `.env.example` file to `.env.local`:
+   ```bash
+   cp .env.example .env.local
+   ```
+
+2. Get your Firebase configuration values from the [Firebase Console](https://console.firebase.google.com/):
+   - Go to your Firebase project settings
+   - Under "Your apps", find your web app configuration
+   - Copy the configuration values
+
+3. Update `.env.local` with your Firebase configuration values:
+   - `NEXT_PUBLIC_FIREBASE_API_KEY` - Your Firebase API key
+   - `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN` - Your Firebase auth domain
+   - `NEXT_PUBLIC_FIREBASE_PROJECT_ID` - Your Firebase project ID
+   - `NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET` - Your Firebase storage bucket
+   - `NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID` - Your Firebase messaging sender ID
+   - `NEXT_PUBLIC_FIREBASE_APP_ID` - Your Firebase app ID
+   - `NEXT_PUBLIC_FIREBASE_MEASUREMENT_ID` - Your Firebase measurement ID (optional)
+
+### Running the Development Server
+
 First, run the development server:
 
 ```bash
