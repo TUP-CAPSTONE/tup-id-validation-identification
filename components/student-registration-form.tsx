@@ -177,7 +177,7 @@ export function StudentRegistrationForm({
       }
 
       // Extract names from display name
-      // For multiple names, put last part in lastName, everything else in firstName
+      // For names with 3+ parts, put last part in lastName, everything else in firstName
       const nameParts = (user.displayName || "").split(" ").filter(part => part.trim());
       let firstName = "";
       let lastName = "";
