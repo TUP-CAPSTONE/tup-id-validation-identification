@@ -22,6 +22,16 @@ import {
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 
+// Custom error class for registration errors
+class RegistrationError extends Error {
+  code: string;
+  constructor(message: string, code: string) {
+    super(message);
+    this.code = code;
+    this.name = "RegistrationError";
+  }
+}
+
 export function StudentRegistrationForm({
   className,
   ...props
@@ -173,9 +183,10 @@ export function StudentRegistrationForm({
         const studentRef = doc(db, STUDENTS_COLLECTION, currentUser.uid);
         const studentSnap = await transaction.get(studentRef);
         if (studentSnap.exists()) {
-          const error: any = new Error("This Google account is already registered. Please use the login page.");
-          error.code = "registration/already-registered";
-          throw error;
+          throw new RegistrationError(
+            "This Google account is already registered. Please use the login page.",
+            "registration/already-registered"
+          );
         }
 
         // Check if registration request already exists
@@ -183,9 +194,10 @@ export function StudentRegistrationForm({
         const regRequestRef = doc(db, REG_REQUESTS_COLLECTION, currentUser.uid);
         const regRequestSnap = await transaction.get(regRequestRef);
         if (regRequestSnap.exists()) {
-          const error: any = new Error("A registration request for this Google account already exists. Please wait for admin approval.");
-          error.code = "registration/request-exists";
-          throw error;
+          throw new RegistrationError(
+            "A registration request for this Google account already exists. Please wait for admin approval.",
+            "registration/request-exists"
+          );
         }
 
         // Transaction successful - no existing profile or request found
@@ -225,7 +237,8 @@ export function StudentRegistrationForm({
       setShowGoogleForm(true);
 
     } catch (err) {
-      const e: any = err;
+      const e = err as any;
+      // Handle standard Firebase auth errors
       if (e?.code === "auth/popup-closed-by-user") {
         setError("Sign-in cancelled. Please try again.");
       } else if (e?.code === "auth/popup-blocked") {
@@ -235,12 +248,17 @@ export function StudentRegistrationForm({
       } else {
         setError(e?.message || "Google sign-in failed. Please try again.");
       }
+      
       // Clean up auth state if registration checks failed
-      if (auth.currentUser && (e?.code === "registration/already-registered" || e?.code === "registration/request-exists")) {
+      // Check error code regardless of current auth state for reliability
+      const shouldCleanup = e instanceof RegistrationError || 
+                           e?.code === "registration/already-registered" || 
+                           e?.code === "registration/request-exists";
+      if (shouldCleanup && auth.currentUser) {
         try {
           await auth.currentUser.delete();
         } catch (deleteErr) {
-          // Ignore errors during cleanup
+          // Ignore errors during cleanup - user might have already been deleted
         }
       }
     } finally {
