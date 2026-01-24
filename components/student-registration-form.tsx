@@ -3,7 +3,7 @@
 import { auth, db } from "@/lib/firebaseConfig";
 import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { doc, setDoc, serverTimestamp, query, collection, where, getDocs, getDoc } from "firebase/firestore";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -32,15 +32,20 @@ export function StudentRegistrationForm({
 
   const [formData, setFormData] = useState({
     fullName: "",
+    firstName: "",
+    lastName: "",
     email: "",
     guardianEmail: "",
     studentId: "",
     birthDate: "",
     address: "",
     course: "",
+    section: "",
     yearLevel: "",
+    phone: "",
     password: "",
     confirmPassword: "",
+    remarks: "",
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -136,15 +141,20 @@ export function StudentRegistrationForm({
       // clear form
       setFormData({
         fullName: "",
+        firstName: "",
+        lastName: "",
         email: "",
         guardianEmail: "",
         studentId: "",
         birthDate: "",
         address: "",
         course: "",
+        section: "",
         yearLevel: "",
+        phone: "",
         password: "",
         confirmPassword: "",
+        remarks: "",
       });
 
     } catch (err) {
@@ -284,16 +294,20 @@ export function StudentRegistrationForm({
 
       // Clear form and Google data
       setFormData({
+        fullName: "",
         firstName: "",
         lastName: "",
         email: "",
+        guardianEmail: "",
         studentId: "",
-        phone: "",
-        password: "",
-        confirmPassword: "",
+        birthDate: "",
+        address: "",
         course: "",
         section: "",
         yearLevel: "",
+        phone: "",
+        password: "",
+        confirmPassword: "",
         remarks: "",
       });
       setShowGoogleForm(false);
@@ -306,6 +320,12 @@ export function StudentRegistrationForm({
       setLoading(false);
     }
   };
+
+  const [currentTime, setCurrentTime] = useState("");
+
+  useEffect(() => {
+    setCurrentTime(formatDateTime());
+  }, []);
 
   return (
     <div className={cn("w-full bg-white", className)} {...props}>
@@ -490,7 +510,7 @@ export function StudentRegistrationForm({
                   <Button
                     onClick={handleSubmit}
                     disabled={loading || googleLoading}
-                    className="w-full"
+                    className="w-full bg-[#b32032] hover:bg-[#951928]"
                   >
                     {loading ? "Creating account..." : "Register"}
                   </Button>
@@ -509,7 +529,7 @@ export function StudentRegistrationForm({
                   <Button
                     onClick={handleGoogleFormSubmit}
                     disabled={loading}
-                    className="w-full"
+                    className="w-full bg-[#b32032] hover:bg-[#951928]"
                   >
                     {loading ? "Submitting..." : "Complete Registration"}
                   </Button>
@@ -522,16 +542,20 @@ export function StudentRegistrationForm({
                       setShowGoogleForm(false);
                       setGoogleUserData(null);
                       setFormData({
+                        fullName: "",
                         firstName: "",
                         lastName: "",
                         email: "",
+                        guardianEmail: "",
                         studentId: "",
-                        phone: "",
-                        password: "",
-                        confirmPassword: "",
+                        birthDate: "",
+                        address: "",
                         course: "",
                         section: "",
                         yearLevel: "",
+                        phone: "",
+                        password: "",
+                        confirmPassword: "",
                         remarks: "",
                       });
                     }}
@@ -549,14 +573,7 @@ export function StudentRegistrationForm({
                   Login here
                 </a>
               </FieldDescription>
-              <Button
-                onClick={handleSubmit}
-                disabled={loading}
-                className="bg-[#b32032] hover:bg-[#951928] px-8 py-2 text-base font-semibold text-white shadow-md hover:shadow-lg transition"
-              >
-                {loading ? "Submitting..." : "Register"}
-              </Button>
-            </div>
+            </Field>
           </FieldGroup>
         </div>
       </div>

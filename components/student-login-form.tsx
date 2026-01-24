@@ -281,24 +281,25 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
                   <div className="absolute inset-0 flex items-center">
                     <div className="w-full border-t border-gray-200"></div>
                   </div>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Enter your password"
-                    value={formData.password}
-                    onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                    disabled={loading}
-                    required
-                  />
-                </Field>
-
-                <Field>
-                  <Button onClick={handleSubmit} disabled={loading} className="w-full">{loading ? "Logging in..." : "Login"}</Button>
-                  <Button variant="outline" type="button" disabled={loading} className="w-full" onClick={handleGoogleLogin}>Login with Google</Button>
-                  <FieldDescription className="text-center mt-4">
-                    Don't have an account? <a href="/clients/students/register" className="underline underline-offset-4 hover:text-primary font-semibold">Sign up</a>
-                  </FieldDescription>
+                  <div className="relative bg-white px-2 text-center text-sm text-gray-500">
+                    Or continue with
+                  </div>
                 </div>
+
+                {/* Google Login */}
+                <Button 
+                  variant="outline" 
+                  type="button" 
+                  disabled={loading} 
+                  className="w-full" 
+                  onClick={handleGoogleLogin}
+                >
+                  {loading ? "Signing in..." : "Login with Google"}
+                </Button>
+
+                <FieldDescription className="text-center mt-4">
+                  Don't have an account? <a href="/clients/students/register" className="underline underline-offset-4 hover:text-primary font-semibold">Sign up</a>
+                </FieldDescription>
               </>
             )}
 
