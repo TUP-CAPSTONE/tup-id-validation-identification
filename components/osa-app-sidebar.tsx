@@ -1,8 +1,8 @@
-"use client";
+"use client"
 
-import * as React from "react";
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import * as React from "react"
+import Link from "next/link"
+import { usePathname } from "next/navigation"
 
 import {
   LayoutDashboard,
@@ -11,8 +11,8 @@ import {
   MessageCircleMore,
 } from "lucide-react"
 
-import { DatePicker } from "@/components/date-picker";
-import { NavUser } from "@/components/osa-nav-user";
+import { DatePicker } from "@/components/date-picker"
+import { NavUser } from "@/components/osa-nav-user"
 import {
   Sidebar,
   SidebarContent,
@@ -22,35 +22,29 @@ import {
   SidebarMenuItem,
   SidebarRail,
   SidebarSeparator,
-} from "@/components/ui/sidebar";
-import { cn } from "@/lib/utils";
+} from "@/components/ui/sidebar"
+import { cn } from "@/lib/utils"
 
-// This is sample data.
-const data = {
-  user: {
-    name: "OSA Admin",
-    email: "osa@tup.edu.ph",
-    avatar: "/avatars/shadcn.jpg",
-  },
-};
-
-export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
-  const pathname = usePathname();
+export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
+  const pathname = usePathname()
 
   return (
     <Sidebar {...props}>
       <SidebarHeader className="border-sidebar-border h-16 border-b">
-        <NavUser user={data.user} />
+        <NavUser />
       </SidebarHeader>
+
       <SidebarContent className="overflow-hidden">
         <DatePicker />
         <SidebarSeparator className="mx-0" />
+
         <SidebarMenu>
           <SidebarMenuItem>
             <Link href="/clients/OSA/dashboard">
               <SidebarMenuButton
                 className={cn(
-                  pathname === "/clients/OSA/dashboard" ? "bg-primary text-primary-foreground" : ""
+                  pathname === "/clients/OSA/dashboard" &&
+                    "bg-primary text-primary-foreground"
                 )}
               >
                 <LayoutDashboard />
@@ -63,7 +57,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <Link href="/clients/OSA/dashboard/id-validation">
               <SidebarMenuButton
                 className={cn(
-                  pathname.includes("id-validation") ? "bg-primary text-primary-foreground" : ""
+                  pathname.includes("id-validation") &&
+                    "bg-primary text-primary-foreground"
                 )}
               >
                 <IdCardIcon />
@@ -76,7 +71,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <Link href="/clients/OSA/dashboard/students-list">
               <SidebarMenuButton
                 className={cn(
-                  pathname.includes("students-list") ? "bg-primary text-primary-foreground" : ""
+                  pathname.includes("students-list") &&
+                    "bg-primary text-primary-foreground"
                 )}
               >
                 <Users2Icon />
@@ -89,7 +85,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <Link href="/clients/OSA/dashboard/feedbacks">
               <SidebarMenuButton
                 className={cn(
-                  pathname.includes("feedbacks") ? "bg-primary text-primary-foreground" : ""
+                  pathname.includes("feedbacks") &&
+                    "bg-primary text-primary-foreground"
                 )}
               >
                 <MessageCircleMore />
@@ -99,7 +96,8 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
         </SidebarMenu>
       </SidebarContent>
+
       <SidebarRail />
     </Sidebar>
-  );
+  )
 }

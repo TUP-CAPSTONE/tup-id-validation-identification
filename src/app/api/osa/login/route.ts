@@ -8,58 +8,61 @@ export async function POST(req: Request) {
 
     if (!token) {
       return NextResponse.json(
-        { error: "Missing auth token" },
+        { error: "Missing token" },
         { status: 400 }
       )
     }
 
     /**
-     * ✅ Verify Firebase ID token
+     * 1️⃣ Verify Firebase ID token
      */
     const decodedToken = await adminAuth.verifyIdToken(token)
     const uid = decodedToken.uid
 
     /**
-     * ✅ Check admin role
+     * 2️⃣ Get user document from Firestore
      */
-    let isAdmin = false
+    const userRef = adminDB.collection("users").doc(uid)
+    const userSnap = await userRef.get()
 
-    // OPTION A: Custom claims
-    if (decodedToken.role === "admin") {
-      isAdmin = true
-    } else {
-      // OPTION B: Firestore fallback
-      const userSnap = await adminDB.collection("users").doc(uid).get()
-      if (userSnap.exists && userSnap.data()?.role === "admin") {
-        isAdmin = true
-      }
+    if (!userSnap.exists) {
+      return NextResponse.json(
+        { error: "User record not found" },
+        { status: 403 }
+      )
     }
 
-    if (!isAdmin) {
+    const userData = userSnap.data()
+
+    /**
+     * 3️⃣ Check OSA role
+     */
+    if (userData?.role !== "OSA") {
       return NextResponse.json(
-        { error: "Not an admin" },
+        { error: "Not authorized as OSA" },
         { status: 403 }
       )
     }
 
     /**
-     CREATE SESSION COOKIE 
+     * 4️⃣ Create session cookie
      */
+    const expiresIn = 60 * 60 * 24 * 5 * 1000 // 5 days
     const sessionCookie = await adminAuth.createSessionCookie(token, {
-      expiresIn: 60 * 60 * 24 * 5 * 1000, // 5 days
+      expiresIn,
     })
 
-    ;(await cookies()).set("admin_session", sessionCookie, {
+    ;(await cookies()).set("osa_session", sessionCookie, {
       httpOnly: true,
       secure: process.env.NODE_ENV === "production",
       sameSite: "lax",
+      maxAge: expiresIn / 1000,
       path: "/",
     })
 
     return NextResponse.json({ success: true })
   } catch (error) {
-    console.error("Admin login verification failed:", error)
-
+    console.error("OSA login error:", error)
     return NextResponse.json(
       { error: "Unauthorized" },
       { status: 401 }

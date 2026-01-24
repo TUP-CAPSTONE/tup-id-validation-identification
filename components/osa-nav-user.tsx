@@ -1,10 +1,15 @@
 "use client"
 
+import { useEffect, useState } from "react"
+import { useRouter } from "next/navigation"
 import {
   ChevronsUpDown,
   LogOut,
   Settings,
 } from "lucide-react"
+
+import { auth } from "@/lib/firebaseConfig"
+import { signOut, onAuthStateChanged } from "firebase/auth"
 
 import {
   Avatar,
@@ -27,16 +32,44 @@ import {
   useSidebar,
 } from "@/components/ui/sidebar"
 
-export function NavUser({
-  user,
-}: {
-  user: {
+export function NavUser() {
+  const { isMobile } = useSidebar()
+  const router = useRouter()
+
+  const [user, setUser] = useState<{
     name: string
     email: string
     avatar: string
+  } | null>(null)
+
+  useEffect(() => {
+  const fetchUser = async () => {
+    const res = await fetch("/api/osa/me")
+
+    if (!res.ok) {
+      router.replace("/clients/OSA/login")
+      return
+    }
+
+    const data = await res.json()
+    setUser({
+      name: data.name || "OSA Staff",
+      email: data.email,
+      avatar: data.photoURL || "",
+    })
   }
-}) {
-  const { isMobile } = useSidebar()
+
+  fetchUser()
+}, [router])
+
+
+  const handleLogout = async () => {
+    await fetch("/api/osa/logout", { method: "POST" })
+    await signOut(auth)
+    router.replace("/clients/OSA/login")
+  }
+
+  if (!user) return null
 
   return (
     <SidebarMenu>
@@ -58,6 +91,7 @@ export function NavUser({
               <ChevronsUpDown className="ml-auto size-4" />
             </SidebarMenuButton>
           </DropdownMenuTrigger>
+
           <DropdownMenuContent
             className="w-(--radix-dropdown-menu-trigger-width) min-w-56 rounded-lg"
             side={isMobile ? "bottom" : "right"}
@@ -76,15 +110,10 @@ export function NavUser({
                 </div>
               </div>
             </DropdownMenuLabel>
+
             <DropdownMenuSeparator />
-            <DropdownMenuGroup>
-              <DropdownMenuItem>
-                <Settings />
-                Settings
-              </DropdownMenuItem>
-            </DropdownMenuGroup>
-            <DropdownMenuSeparator />
-            <DropdownMenuItem>
+
+            <DropdownMenuItem onClick={handleLogout}>
               <LogOut />
               Log out
             </DropdownMenuItem>
