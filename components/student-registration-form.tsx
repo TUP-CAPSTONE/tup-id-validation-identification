@@ -173,15 +173,19 @@ export function StudentRegistrationForm({
         const studentRef = doc(db, STUDENTS_COLLECTION, currentUser.uid);
         const studentSnap = await transaction.get(studentRef);
         if (studentSnap.exists()) {
-          throw new Error("This Google account is already registered. Please use the login page.");
+          const error: any = new Error("This Google account is already registered. Please use the login page.");
+          error.code = "registration/already-registered";
+          throw error;
         }
 
         // Check if registration request already exists
-        // Note: Query constraints cannot be used in transactions, so we check after
+        // Note: Using document ID instead of query constraints for transaction compatibility
         const regRequestRef = doc(db, REG_REQUESTS_COLLECTION, currentUser.uid);
         const regRequestSnap = await transaction.get(regRequestRef);
         if (regRequestSnap.exists()) {
-          throw new Error("A registration request for this Google account already exists. Please wait for admin approval.");
+          const error: any = new Error("A registration request for this Google account already exists. Please wait for admin approval.");
+          error.code = "registration/request-exists";
+          throw error;
         }
 
         // Transaction successful - no existing profile or request found
@@ -232,7 +236,7 @@ export function StudentRegistrationForm({
         setError(e?.message || "Google sign-in failed. Please try again.");
       }
       // Clean up auth state if registration checks failed
-      if (auth.currentUser && (e?.message?.includes("already registered") || e?.message?.includes("already exists"))) {
+      if (auth.currentUser && (e?.code === "registration/already-registered" || e?.code === "registration/request-exists")) {
         try {
           await auth.currentUser.delete();
         } catch (deleteErr) {
