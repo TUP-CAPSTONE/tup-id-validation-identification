@@ -177,7 +177,7 @@ export function StudentRegistrationForm({
       }
 
       // Extract names from display name
-      // For multiple names, put first two parts in firstName, rest in lastName
+      // For multiple names, put last part in lastName, everything else in firstName
       const nameParts = (user.displayName || "").split(" ").filter(part => part.trim());
       let firstName = "";
       let lastName = "";
@@ -188,9 +188,9 @@ export function StudentRegistrationForm({
         firstName = nameParts[0];
         lastName = nameParts[1];
       } else {
-        // 3+ parts: first two go to firstName, rest to lastName
-        firstName = nameParts.slice(0, 2).join(" ");
-        lastName = nameParts.slice(2).join(" ");
+        // 3+ parts: last part goes to lastName, everything else to firstName
+        firstName = nameParts.slice(0, -1).join(" ");
+        lastName = nameParts[nameParts.length - 1];
       }
 
       // Store Google user data and show additional fields form
