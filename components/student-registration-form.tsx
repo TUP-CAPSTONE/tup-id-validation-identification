@@ -2,7 +2,7 @@
 
 import { auth, db } from "@/lib/firebaseConfig";
 import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { doc, setDoc, serverTimestamp, query, collection, where, getDocs, getDoc } from "firebase/firestore";
+import { doc, setDoc, serverTimestamp, query, collection, where, getDocs, getDoc, runTransaction } from "firebase/firestore";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -156,29 +156,40 @@ export function StudentRegistrationForm({
     setGoogleLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      const result = await signInWithPopup(auth, provider);
-      const user = result.user;
+      await signInWithPopup(auth, provider);
 
-      // Check if user already has a student profile
-      const studentRef = doc(db, STUDENTS_COLLECTION, user.uid);
-      const studentSnap = await getDoc(studentRef);
-      if (studentSnap.exists()) {
-        setError("This Google account is already registered. Please use the login page.");
-        await user.delete(); // Remove the auth user since they should login instead
+      // Use auth.currentUser to avoid stale references from result.user
+      // This protects against race conditions if auth state changes
+      const currentUser = auth.currentUser;
+      if (!currentUser) {
+        setError("Authentication failed. Please try again.");
         return;
       }
 
-      // Check if registration request already exists
-      const qReqs = query(collection(db, REG_REQUESTS_COLLECTION), where("uid", "==", user.uid));
-      const snapReqs = await getDocs(qReqs);
-      if (!snapReqs.empty) {
-        setError("A registration request for this Google account already exists. Please wait for admin approval.");
-        return;
-      }
+      // Use transaction to atomically check for existing profiles/requests
+      // This prevents race conditions from multiple tabs or rapid navigation
+      await runTransaction(db, async (transaction) => {
+        // Check if user already has a student profile
+        const studentRef = doc(db, STUDENTS_COLLECTION, currentUser.uid);
+        const studentSnap = await transaction.get(studentRef);
+        if (studentSnap.exists()) {
+          throw new Error("This Google account is already registered. Please use the login page.");
+        }
+
+        // Check if registration request already exists
+        // Note: Query constraints cannot be used in transactions, so we check after
+        const regRequestRef = doc(db, REG_REQUESTS_COLLECTION, currentUser.uid);
+        const regRequestSnap = await transaction.get(regRequestRef);
+        if (regRequestSnap.exists()) {
+          throw new Error("A registration request for this Google account already exists. Please wait for admin approval.");
+        }
+
+        // Transaction successful - no existing profile or request found
+      });
 
       // Extract names from display name
       // For multiple names, put first two parts in firstName, rest in lastName
-      const nameParts = (user.displayName || "").split(" ").filter(part => part.trim());
+      const nameParts = (currentUser.displayName || "").split(" ").filter(part => part.trim());
       let firstName = "";
       let lastName = "";
       
@@ -195,15 +206,15 @@ export function StudentRegistrationForm({
 
       // Store Google user data and show additional fields form
       setGoogleUserData({
-        uid: user.uid,
-        email: user.email || "",
-        displayName: user.displayName || ""
+        uid: currentUser.uid,
+        email: currentUser.email || "",
+        displayName: currentUser.displayName || ""
       });
       setFormData({
         ...formData,
         firstName,
         lastName,
-        email: user.email || "",
+        email: currentUser.email || "",
         password: "",
         confirmPassword: ""
       });
@@ -219,6 +230,14 @@ export function StudentRegistrationForm({
         setError("");
       } else {
         setError(e?.message || "Google sign-in failed. Please try again.");
+      }
+      // Clean up auth state if registration checks failed
+      if (auth.currentUser && (e?.message?.includes("already registered") || e?.message?.includes("already exists"))) {
+        try {
+          await auth.currentUser.delete();
+        } catch (deleteErr) {
+          // Ignore errors during cleanup
+        }
       }
     } finally {
       setGoogleLoading(false);
