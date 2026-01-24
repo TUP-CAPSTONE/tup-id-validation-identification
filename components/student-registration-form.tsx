@@ -1,7 +1,7 @@
 "use client";
 
 import { auth, db } from "@/lib/firebaseConfig";
-import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile, GoogleAuthProvider, signInWithPopup, signOut } from "firebase/auth";
 import { doc, setDoc, serverTimestamp, query, collection, where, getDocs, getDoc } from "firebase/firestore";
 import { useState } from "react";
 import { cn } from "@/lib/utils";
@@ -524,7 +524,11 @@ export function StudentRegistrationForm({
                     type="button"
                     disabled={loading}
                     className="w-full"
-                    onClick={() => {
+                    onClick={async () => {
+                      // Sign out the user to ensure a clean state
+                      if (auth.currentUser) {
+                        await signOut(auth);
+                      }
                       setShowGoogleForm(false);
                       setGoogleUserData(null);
                       setFormData({
