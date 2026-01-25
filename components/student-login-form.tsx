@@ -143,12 +143,8 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
     }
   };
 
-  const handleContinueAsUser = () => router.push("/clients/students/dashboard");
-  const handleLogoutAndLogin = async () => {
-    await signOut(auth);
-    setCurrentUser(null);
-    router.replace("/clients/students/login");
-  };
+  // Removed "Continue as this user" actions to avoid showing
+  // extra prompts when already authenticated.
 
   const handleGoogleLogin = async () => {
     setError("");
@@ -192,33 +188,7 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
               </div>
             )}
 
-            {currentUser && !checkingAuth && (
-              <div className="p-5 bg-green-50 rounded-lg border border-green-200 space-y-4">
-                <p className="text-sm font-semibold text-green-800 flex items-center">
-                  <span className="w-2 h-2 rounded-full bg-green-600 mr-2"></span>
-                  Currently signed in as:
-                </p>
-                <div className="bg-white rounded-lg p-4 border border-green-100">
-                  <p className="font-semibold text-gray-900">{currentUser.firstName} {currentUser.lastName}</p>
-                  <p className="text-sm text-gray-600 mt-1">{currentUser.email}</p>
-                </div>
-                <div className="flex gap-3 pt-2">
-                  <Button 
-                    onClick={handleContinueAsUser} 
-                    className="flex-1 bg-[#b32032] hover:bg-[#951928] text-white font-medium"
-                  >
-                    Continue as this user
-                  </Button>
-                  <Button 
-                    onClick={handleLogoutAndLogin} 
-                    className="flex-1 border border-gray-300 hover:bg-gray-50 text-gray-700 font-medium"
-                    variant="outline"
-                  >
-                    Sign in differently
-                  </Button>
-                </div>
-              </div>
-            )}
+            {/* Removed "Continue as this user" section to prevent UI from showing when logged in */}
 
             {!currentUser && !checkingAuth && (
               <>

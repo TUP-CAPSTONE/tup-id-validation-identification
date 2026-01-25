@@ -50,7 +50,7 @@ export default function StudentValidationRequest() {
 
         // Check for existing validation request
         const q = query(
-          collection(db, 'validation_requests'),
+          collection(db, 'validation_requests2'),
           where('studentId', '==', user.uid)
         );
         const snapshot = await getDocs(q);
@@ -110,7 +110,7 @@ export default function StudentValidationRequest() {
 
     try {
       // Create document in Firestore with base64 data
-      await addDoc(collection(db, 'validation_requests'), {
+      await addDoc(collection(db, 'validation_requests2'), {
         studentId: currentUser.uid,
         tupId: studentProfile?.studentId || 'N/A',
         studentName: `${studentProfile?.firstName || ''} ${studentProfile?.lastName || ''}`.trim() || 'Unknown',

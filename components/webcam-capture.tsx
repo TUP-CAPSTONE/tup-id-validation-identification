@@ -20,23 +20,35 @@ export default function WebcamCapture({
   const [error, setError] = useState<string | null>(null);
 
   const videoConstraints = {
-    facingMode: useBackCamera ? { exact: "environment" } : "user",
-    width: 1280,
-    height: 720,
+    facingMode: useBackCamera ? "environment" : "user",
+    width: { ideal: 1280 },
+    height: { ideal: 720 },
   };
 
   const capture = useCallback(() => {
     const imageSrc = webcamRef.current?.getScreenshot();
     if (imageSrc) {
-      setCapturedImage(imageSrc);
+      // Verify it's a base64 data URL
+      if (imageSrc.startsWith('data:image/jpeg;base64,') || imageSrc.startsWith('data:image/png;base64,')) {
+        setCapturedImage(imageSrc);
+        console.log('Image captured as base64, length:', imageSrc.length);
+      } else {
+        setError('Failed to capture image in base64 format');
+      }
     }
   }, [webcamRef]);
 
   const handleConfirm = () => {
     if (capturedImage) {
-      onCapture(capturedImage);
-      setIsOpen(false);
-      setCapturedImage(null);
+      // Double-check it's base64 before passing to parent
+      if (capturedImage.startsWith('data:image/')) {
+        console.log('Confirming base64 image, length:', capturedImage.length);
+        onCapture(capturedImage);
+        setIsOpen(false);
+        setCapturedImage(null);
+      } else {
+        setError('Invalid image format');
+      }
     }
   };
 
