@@ -87,30 +87,37 @@ export function IdValidationDialog({ open, onClose, request }: Props) {
                   width={150}
                   height={150}
                   className="rounded-md cursor-pointer hover:opacity-80"
-                  onClick={() =>
-                    openPreview(request.idPicture, "TUP ID")
-                  }
+                  onClick={() => openPreview(request.idPicture, "TUP ID")}
+                />
+              </div>
+
+              {/* COR */}
+              <div className="space-y-1 text-center">
+                <p className="text-xs">COR</p>
+                <Image
+                  src={request.corFile}
+                  alt="COR"
+                  width={150}
+                  height={150}
+                  className="rounded-md cursor-pointer hover:opacity-80"
+                  onClick={() => openPreview(request.corFile, "COR")}
                 />
               </div>
 
               {/* SELFIES */}
-              {Object.entries(request.selfiePictures).map(
-                ([key, img]) => (
-                  <div key={key} className="space-y-1 text-center">
-                    <p className="text-xs capitalize">{key} selfie</p>
-                    <Image
-                      src={img}
-                      alt={key}
-                      width={150}
-                      height={150}
-                      className="rounded-md cursor-pointer hover:opacity-80"
-                      onClick={() =>
-                        openPreview(img, `${key} selfie`)
-                      }
-                    />
-                  </div>
-                )
-              )}
+              {Object.entries(request.selfiePictures).map(([key, img]) => (
+                <div key={key} className="space-y-1 text-center">
+                  <p className="text-xs capitalize">{key} selfie</p>
+                  <Image
+                    src={img}
+                    alt={key}
+                    width={150}
+                    height={150}
+                    className="rounded-md cursor-pointer hover:opacity-80"
+                    onClick={() => openPreview(img, `${key} selfie`)}
+                  />
+                </div>
+              ))}
             </div>
           </div>
 
@@ -118,13 +125,9 @@ export function IdValidationDialog({ open, onClose, request }: Props) {
 
           {/* ACTION BUTTONS */}
           <div className="flex justify-end gap-3">
-            <Button variant="destructive">
-              Reject
-            </Button>
+            <Button variant="destructive">Reject</Button>
 
-            <Button className="bg-green-600 hover:bg-green-700">
-              Accept
-            </Button>
+            <Button className="bg-green-600 hover:bg-green-700">Accept</Button>
           </div>
         </DialogContent>
       </Dialog>
@@ -139,5 +142,5 @@ export function IdValidationDialog({ open, onClose, request }: Props) {
         />
       )}
     </>
-  )
+  );
 }

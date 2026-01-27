@@ -34,6 +34,7 @@ async function getRequests(): Promise<ValidationRequest[]> {
       email: data.email,
       phoneNumber: data.phoneNumber,
       idPicture: data.idPicture,
+      corFile: data.corFile,
       selfiePictures: data.selfiePictures,
       status: data.status,
 

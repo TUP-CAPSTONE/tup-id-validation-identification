@@ -22,6 +22,7 @@ export type ValidationRequest = {
     left: string
     back: string
   }
+  corFile: string;
   status: "pending" | "accepted" | "rejected"
   requestTime: string
 }
