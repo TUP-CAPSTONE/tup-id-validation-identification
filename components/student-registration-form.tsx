@@ -1,8 +1,8 @@
 "use client";
 
 import { auth, db } from "@/lib/firebaseConfig";
-import { createUserWithEmailAndPassword, sendEmailVerification, updateProfile, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { doc, setDoc, serverTimestamp, query, collection, where, getDocs, getDoc } from "firebase/firestore";
+import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
+import { doc, setDoc, serverTimestamp, query, collection, where, getDocs } from "firebase/firestore";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,8 +20,7 @@ export function StudentRegistrationForm({
   ...props
 }: React.ComponentProps<"div">) {
 
-  const STUDENTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_STUDENTS_COLLECTION || "students";
-  const REG_REQUESTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_REG_REQUESTS_COLLECTION || "registration_requests";
+  const REG_REQUESTS_COLLECTION = "registration_requests";
   const formatDateTime = () => {
     const now = new Date();
     const dayName = now.toLocaleDateString("en-US", { weekday: "long" }).toUpperCase();
@@ -31,29 +30,50 @@ export function StudentRegistrationForm({
   };
 
   const [formData, setFormData] = useState({
-    fullName: "",
-    firstName: "",
-    lastName: "",
-    email: "",
-    guardianEmail: "",
-    studentId: "",
-    birthDate: "",
-    address: "",
-    course: "",
-    section: "",
-    yearLevel: "",
-    phone: "",
-    password: "",
-    confirmPassword: "",
-    remarks: "",
+    name: "",
+    tup_id: "",
+    bday: "",
+    student_email: "",
+    student_phone_num: "",
+    guardian_email: "",
+    guardian_phone_number: "",
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
   const [loading, setLoading] = useState(false);
+  const [validatingGuardianEmail, setValidatingGuardianEmail] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showGoogleForm, setShowGoogleForm] = useState(false);
   const [googleUserData, setGoogleUserData] = useState<{ uid: string; email: string; displayName: string } | null>(null);
   
+  // Guardian email validation function
+  const validateGuardianEmail = async (email: string): Promise<boolean> => {
+    if (!email || !email.includes("@")) return false;
+    
+    setValidatingGuardianEmail(true);
+    try {
+      // Basic format validation
+      const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+      if (!emailRegex.test(email)) {
+        return false;
+      }
+
+      // Additional validation: Check if domain exists (basic check)
+      // For production, you might want to use an email validation API
+      const domain = email.split('@')[1];
+      const commonDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'tup.edu.ph'];
+      
+      // For now, we'll accept common domains or any .edu.ph domain
+      const isValid = commonDomains.includes(domain.toLowerCase()) || domain.toLowerCase().endsWith('.edu.ph');
+      
+      return isValid;
+    } catch (err) {
+      console.error("Guardian email validation error:", err);
+      return false;
+    } finally {
+      setValidatingGuardianEmail(false);
+    }
+  };
 
   const handleSubmit = async () => {
     setError("");
@@ -62,99 +82,62 @@ export function StudentRegistrationForm({
 
     // Validation
     if (
-      !formData.fullName ||
-      !formData.email ||
-      !formData.studentId ||
-      !formData.birthDate ||
-      !formData.address ||
-      !formData.yearLevel ||
-      !formData.course ||
-      !formData.password ||
-      !formData.confirmPassword
+      !formData.name ||
+      !formData.tup_id ||
+      !formData.bday ||
+      !formData.student_email ||
+      !formData.student_phone_num ||
+      !formData.guardian_email ||
+      !formData.guardian_phone_number
     ) {
       setError("Please fill in all required fields");
       setLoading(false);
       return;
     }
 
-    if (formData.password !== formData.confirmPassword) {
-      setError("Passwords do not match");
-      setLoading(false);
-      return;
-    }
-
-    if (formData.password.length < 8) {
-      setError("Password must be at least 8 characters long");
+    // Validate guardian email
+    const isGuardianEmailValid = await validateGuardianEmail(formData.guardian_email);
+    if (!isGuardianEmailValid) {
+      setError("Guardian email is invalid or not recognized. Please use a valid email address.");
       setLoading(false);
       return;
     }
 
     try {
-      const [derivedFirstName, ...restName] = formData.fullName.trim().split(/\s+/);
-      const derivedLastName = restName.join(" ");
-
-      // OPTIONAL: check if student already exists in students collection
-      const qStudents = query(collection(db, STUDENTS_COLLECTION), where("studentId", "==", formData.studentId));
-      const snapStudents = await getDocs(qStudents);
-      if (!snapStudents.empty) {
-        throw new Error("This Student ID is already registered. Contact admin if this is a mistake.");
-      }
-
-      // OPTIONAL: check for existing registration requests for same studentNumber
-      const qReqs = query(collection(db, REG_REQUESTS_COLLECTION), where("studentNumber", "==", formData.studentId));
+      // Check if TUP ID already exists in registration_requests
+      const qReqs = query(
+        collection(db, REG_REQUESTS_COLLECTION), 
+        where("tup_id", "==", formData.tup_id)
+      );
       const snapReqs = await getDocs(qReqs);
       if (!snapReqs.empty) {
-        // if any existing request is Pending or Approved, block duplicate
-        const existing = snapReqs.docs.map(d => d.data());
-        const hasActive = existing.some((r: any) => r.status === "Pending" || r.status === "Approved");
-        if (hasActive) throw new Error("A registration request for this Student ID already exists.");
+        throw new Error("This TUP ID is already registered. Contact admin if this is a mistake.");
       }
 
-      // Create Auth user now (account will exist but access is gated by admin approval)
-      const userCredential = await createUserWithEmailAndPassword(auth, formData.email, formData.password);
-      const user = userCredential.user;
-
-      // Optional: set display name
-      await updateProfile(user, { displayName: formData.fullName.trim() });
-
-      // Create registration request in registration_requests collection
-      await setDoc(doc(db, REG_REQUESTS_COLLECTION, user.uid), {
-        uid: user.uid,
-        email: formData.email,
-        guardianEmail: formData.guardianEmail || null,
-        firstName: derivedFirstName,
-        lastName: derivedLastName || null,
-        studentNumber: formData.studentId,
-        status: "Pending",
-        course: formData.course || null,
-        yearLevel: formData.yearLevel ? Number(formData.yearLevel) : null,
-        remarks: null,
-        reviewBy: null,
+      // Use TUP ID as document ID and save registration data (no auth account creation)
+      await setDoc(doc(db, REG_REQUESTS_COLLECTION, formData.tup_id), {
+        name: formData.name,
+        tup_id: formData.tup_id,
+        bday: formData.bday,
+        student_email: formData.student_email,
+        student_phone_num: formData.student_phone_num,
+        guardian_email: formData.guardian_email,
+        guardian_phone_number: formData.guardian_phone_number,
         createdAt: serverTimestamp(),
+        status: "pending",
       });
 
-      // Send verification email
-      await sendEmailVerification(user);
+      setSuccess("Registration submitted successfully! Your information has been saved. You will be notified once your account is approved.");
 
-      setSuccess("Registration submitted. Check your email for verification. Your account will be activated after admin approval.");
-
-      // clear form
+      // Clear form
       setFormData({
-        fullName: "",
-        firstName: "",
-        lastName: "",
-        email: "",
-        guardianEmail: "",
-        studentId: "",
-        birthDate: "",
-        address: "",
-        course: "",
-        section: "",
-        yearLevel: "",
-        phone: "",
-        password: "",
-        confirmPassword: "",
-        remarks: "",
+        name: "",
+        tup_id: "",
+        bday: "",
+        student_email: "",
+        student_phone_num: "",
+        guardian_email: "",
+        guardian_phone_number: "",
       });
 
     } catch (err) {
@@ -173,40 +156,6 @@ export function StudentRegistrationForm({
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      // Check if user already has a student profile
-      const studentRef = doc(db, STUDENTS_COLLECTION, user.uid);
-      const studentSnap = await getDoc(studentRef);
-      if (studentSnap.exists()) {
-        setError("This Google account is already registered. Please use the login page.");
-        await user.delete(); // Remove the auth user since they should login instead
-        return;
-      }
-
-      // Check if registration request already exists
-      const qReqs = query(collection(db, REG_REQUESTS_COLLECTION), where("uid", "==", user.uid));
-      const snapReqs = await getDocs(qReqs);
-      if (!snapReqs.empty) {
-        setError("A registration request for this Google account already exists. Please wait for admin approval.");
-        return;
-      }
-
-      // Extract names from display name
-      // For multiple names, put first two parts in firstName, rest in lastName
-      const nameParts = (user.displayName || "").split(" ").filter(part => part.trim());
-      let firstName = "";
-      let lastName = "";
-      
-      if (nameParts.length === 1) {
-        firstName = nameParts[0];
-      } else if (nameParts.length === 2) {
-        firstName = nameParts[0];
-        lastName = nameParts[1];
-      } else {
-        // 3+ parts: first two go to firstName, rest to lastName
-        firstName = nameParts.slice(0, 2).join(" ");
-        lastName = nameParts.slice(2).join(" ");
-      }
-
       // Store Google user data and show additional fields form
       setGoogleUserData({
         uid: user.uid,
@@ -215,11 +164,7 @@ export function StudentRegistrationForm({
       });
       setFormData({
         ...formData,
-        firstName,
-        lastName,
-        email: user.email || "",
-        password: "",
-        confirmPassword: ""
+        student_email: user.email || "",
       });
       setShowGoogleForm(true);
 
@@ -246,69 +191,56 @@ export function StudentRegistrationForm({
     setLoading(true);
 
     // Validation for Google registration
-    if (!formData.firstName || !formData.lastName || !formData.studentId) {
+    if (!formData.name || !formData.tup_id || !formData.bday || !formData.guardian_email || !formData.guardian_phone_number) {
       setError("Please fill in all required fields");
       setLoading(false);
       return;
     }
 
-    try {
-      // Check if student ID already exists
-      const qStudents = query(collection(db, STUDENTS_COLLECTION), where("studentId", "==", formData.studentId));
-      const snapStudents = await getDocs(qStudents);
-      if (!snapStudents.empty) {
-        throw new Error("This Student ID is already registered. Contact admin if this is a mistake.");
-      }
+    // Validate guardian email
+    const isGuardianEmailValid = await validateGuardianEmail(formData.guardian_email);
+    if (!isGuardianEmailValid) {
+      setError("Guardian email is invalid or not recognized. Please use a valid email address.");
+      setLoading(false);
+      return;
+    }
 
-      // Check for existing registration requests with same studentNumber
-      const qReqs = query(collection(db, REG_REQUESTS_COLLECTION), where("studentNumber", "==", formData.studentId));
+    try {
+      // Check if TUP ID already exists
+      const qReqs = query(
+        collection(db, REG_REQUESTS_COLLECTION), 
+        where("tup_id", "==", formData.tup_id)
+      );
       const snapReqs = await getDocs(qReqs);
       if (!snapReqs.empty) {
-        const existing = snapReqs.docs.map(d => d.data());
-        const hasActive = existing.some((r: any) => r.status === "Pending" || r.status === "Approved");
-        if (hasActive) throw new Error("A registration request for this Student ID already exists.");
+        throw new Error("This TUP ID is already registered. Contact admin if this is a mistake.");
       }
 
-      // Update profile
-      await updateProfile(auth.currentUser!, { displayName: `${formData.firstName} ${formData.lastName}` });
-
-      // Create registration request
-      await setDoc(doc(db, REG_REQUESTS_COLLECTION, googleUserData.uid), {
-        uid: googleUserData.uid,
-        email: googleUserData.email,
-        firstName: formData.firstName,
-        lastName: formData.lastName,
-        studentNumber: formData.studentId,
-        phone: formData.phone || null,
-        status: "Pending",
-        course: formData.course || null,
-        section: formData.section || null,
-        yearLevel: formData.yearLevel ? Number(formData.yearLevel) : null,
-        remarks: null,
-        reviewBy: null,
+      // Save to registration_requests using TUP ID as document ID
+      await setDoc(doc(db, REG_REQUESTS_COLLECTION, formData.tup_id), {
+        name: formData.name,
+        tup_id: formData.tup_id,
+        bday: formData.bday,
+        student_email: formData.student_email,
+        student_phone_num: formData.student_phone_num,
+        guardian_email: formData.guardian_email,
+        guardian_phone_number: formData.guardian_phone_number,
         createdAt: serverTimestamp(),
+        status: "pending",
         authProvider: "google"
       });
 
-      setSuccess("Registration submitted with Google account. Your account will be activated after admin approval.");
+      setSuccess("Registration submitted with Google account! Your information has been saved. You will be notified once your account is approved.");
 
       // Clear form and Google data
       setFormData({
-        fullName: "",
-        firstName: "",
-        lastName: "",
-        email: "",
-        guardianEmail: "",
-        studentId: "",
-        birthDate: "",
-        address: "",
-        course: "",
-        section: "",
-        yearLevel: "",
-        phone: "",
-        password: "",
-        confirmPassword: "",
-        remarks: "",
+        name: "",
+        tup_id: "",
+        bday: "",
+        student_email: "",
+        student_phone_num: "",
+        guardian_email: "",
+        guardian_phone_number: "",
       });
       setShowGoogleForm(false);
       setGoogleUserData(null);
@@ -364,146 +296,133 @@ export function StudentRegistrationForm({
               </div>
             )}
 
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+            {/* Student Information */}
+            <div className="space-y-5">
               <Field>
-                <FieldLabel htmlFor="firstName">First Name *</FieldLabel>
+                <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="name">
+                  Full Name *
+                </FieldLabel>
                 <Input
-                  id="firstName"
+                  id="name"
                   type="text"
-                  placeholder="Juan"
-                  value={formData.firstName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, firstName: e.target.value })
-                  }
+                  placeholder="Juan Dela Cruz"
+                  value={formData.name}
+                  onChange={(e) => setFormData({ ...formData, name: e.target.value })}
                   disabled={loading || (showGoogleForm && !!googleUserData)}
+                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
                   required
                 />
               </Field>
 
               <Field>
-                <FieldLabel htmlFor="lastName">Last Name *</FieldLabel>
+                <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="tup_id">
+                  TUP ID *
+                </FieldLabel>
                 <Input
-                  id="lastName"
+                  id="tup_id"
                   type="text"
-                  placeholder="Dela Cruz"
-                  value={formData.lastName}
-                  onChange={(e) =>
-                    setFormData({ ...formData, lastName: e.target.value })
-                  }
+                  placeholder="TUPM-22-1234"
+                  value={formData.tup_id}
+                  onChange={(e) => setFormData({ ...formData, tup_id: e.target.value.toUpperCase() })}
                   disabled={loading || (showGoogleForm && !!googleUserData)}
+                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
+                  required
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="bday">
+                  Birth Date *
+                </FieldLabel>
+                <Input
+                  id="bday"
+                  type="date"
+                  value={formData.bday}
+                  onChange={(e) => setFormData({ ...formData, bday: e.target.value })}
+                  disabled={loading || (showGoogleForm && !!googleUserData)}
+                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
+                  required
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="student_email">
+                  Student Email *
+                </FieldLabel>
+                <Input
+                  id="student_email"
+                  type="email"
+                  placeholder="student@tup.edu.ph"
+                  value={formData.student_email}
+                  onChange={(e) => setFormData({ ...formData, student_email: e.target.value })}
+                  disabled={loading || (showGoogleForm && !!googleUserData)}
+                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
+                  required
+                />
+              </Field>
+
+              <Field>
+                <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="student_phone_num">
+                  Student Phone Number *
+                </FieldLabel>
+                <Input
+                  id="student_phone_num"
+                  type="tel"
+                  placeholder="09123456789"
+                  value={formData.student_phone_num}
+                  onChange={(e) => setFormData({ ...formData, student_phone_num: e.target.value })}
+                  disabled={loading || (showGoogleForm && !!googleUserData)}
+                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
                   required
                 />
               </Field>
             </div>
 
-            {/* Academic Information Section */}
+            {/* Guardian Information Section */}
             <div className="pt-2">
               <h3 className="text-sm font-semibold uppercase tracking-wide text-[#b32032] mb-4 flex items-center">
                 <span className="w-1 h-1 rounded-full bg-[#b32032] mr-3"></span>
-                Academic Information
+                Guardian Information
               </h3>
-              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+              
+              <div className="space-y-5">
                 <Field>
-                  <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="studentId">TUP-ID *</FieldLabel>
+                  <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="guardian_email">
+                    Guardian Email *
+                  </FieldLabel>
                   <Input
-                    id="studentId"
-                    type="text"
-                    placeholder="TUPM-22-1234"
-                    value={formData.studentId}
-                    onChange={(e) => setFormData({ ...formData, studentId: e.target.value.toUpperCase() })}
-                    disabled={loading}
+                    id="guardian_email"
+                    type="email"
+                    placeholder="guardian@example.com"
+                    value={formData.guardian_email}
+                    onChange={(e) => setFormData({ ...formData, guardian_email: e.target.value })}
+                    disabled={loading || validatingGuardianEmail}
+                    className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
+                    required
+                  />
+                  <FieldDescription className="text-xs text-gray-500 mt-1">
+                    We will validate this email address before submission
+                  </FieldDescription>
+                </Field>
+
+                <Field>
+                  <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="guardian_phone_number">
+                    Guardian Phone Number *
+                  </FieldLabel>
+                  <Input
+                    id="guardian_phone_number"
+                    type="tel"
+                    placeholder="09123456789"
+                    value={formData.guardian_phone_number}
+                    onChange={(e) => setFormData({ ...formData, guardian_phone_number: e.target.value })}
+                    disabled={loading || (showGoogleForm && !!googleUserData)}
                     className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
                     required
                   />
                 </Field>
-
-                <Field>
-                  <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="course">Course *</FieldLabel>
-                  <select
-                    id="course"
-                    value={formData.course}
-                    onChange={(e) => setFormData({ ...formData, course: e.target.value })}
-                    disabled={loading}
-                    className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
-                    required
-                  >
-                    <option value="" disabled>
-                      Select course
-                    </option>
-                    {[
-                      "BSCS",
-                      "BSIT",
-                      "BSECE",
-                      "BSEE",
-                      "BSME",
-                      "BSCE",
-                    ].map((course) => (
-                      <option key={course} value={course}>
-                        {course}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
-
-                <Field>
-                  <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="yearLevel">Year Level *</FieldLabel>
-                  <select
-                    id="yearLevel"
-                    value={formData.yearLevel}
-                    onChange={(e) => setFormData({ ...formData, yearLevel: e.target.value })}
-                    disabled={loading}
-                    className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm text-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
-                    required
-                  >
-                    <option value="" disabled>
-                      Select year level
-                    </option>
-                    {["1", "2", "3", "4", "5"].map((year) => (
-                      <option key={year} value={year}>
-                        Year {year}
-                      </option>
-                    ))}
-                  </select>
-                </Field>
               </div>
             </div>
 
-            {!showGoogleForm && (
-              <>
-                <Field>
-                  <FieldLabel htmlFor="password">Password *</FieldLabel>
-                  <Input
-                    id="password"
-                    type="password"
-                    placeholder="Min. 8 characters"
-                    value={formData.password}
-                    onChange={(e) =>
-                      setFormData({ ...formData, password: e.target.value })
-                    }
-                    disabled={loading}
-                    required
-                  />
-                  <FieldDescription>Must be at least 8 characters long</FieldDescription>
-                </Field>
-
-                <Field>
-                  <FieldLabel htmlFor="confirmPassword">
-                    Confirm Password
-                  </FieldLabel>
-                  <Input
-                    id="confirmPassword"
-                    type="password"
-                    placeholder="Re-enter password"
-                    value={formData.confirmPassword}
-                    onChange={(e) =>
-                      setFormData({ ...formData, confirmPassword: e.target.value })
-                    }
-                    disabled={loading}
-                    required
-                  />
-                </Field>
-              </>
-            )}
             <Field>
               {!showGoogleForm ? (
                 <>
@@ -512,7 +431,7 @@ export function StudentRegistrationForm({
                     disabled={loading || googleLoading}
                     className="w-full bg-[#b32032] hover:bg-[#951928]"
                   >
-                    {loading ? "Creating account..." : "Register"}
+                    {loading ? "Submitting..." : validatingGuardianEmail ? "Validating..." : "Submit Registration"}
                   </Button>
                   <Button
                     variant="outline"
@@ -542,21 +461,13 @@ export function StudentRegistrationForm({
                       setShowGoogleForm(false);
                       setGoogleUserData(null);
                       setFormData({
-                        fullName: "",
-                        firstName: "",
-                        lastName: "",
-                        email: "",
-                        guardianEmail: "",
-                        studentId: "",
-                        birthDate: "",
-                        address: "",
-                        course: "",
-                        section: "",
-                        yearLevel: "",
-                        phone: "",
-                        password: "",
-                        confirmPassword: "",
-                        remarks: "",
+                        name: "",
+                        tup_id: "",
+                        bday: "",
+                        student_email: "",
+                        student_phone_num: "",
+                        guardian_email: "",
+                        guardian_phone_number: "",
                       });
                     }}
                   >
@@ -564,6 +475,7 @@ export function StudentRegistrationForm({
                   </Button>
                 </>
               )}
+              
               <FieldDescription className="text-center mt-4">
                 Already have an account?{" "}
                 <a
