@@ -21,8 +21,28 @@ import {
 } from "@/components/osa-id-validation-table"
 
 async function getRequests(): Promise<ValidationRequest[]> {
-  const snapshot = await getDocs(collection(db, "validation_requests"))
-  return snapshot.docs.map((doc) => doc.data()) as ValidationRequest[]
+  const snapshot = await getDocs(collection(db, "validation_requests2"))
+
+  return snapshot.docs.map((doc) => {
+    const data = doc.data()
+
+    return {
+      requestId: doc.id,
+      studentId: data.studentId,
+      studentName: data.studentName,
+      tupId: data.tupId,
+      email: data.email,
+      phoneNumber: data.phoneNumber,
+      idPicture: data.idPicture,
+      selfiePictures: data.selfiePictures,
+      status: data.status,
+
+      // ✅ Firestore Timestamp → string
+      requestTime: data.requestTime
+        ? data.requestTime.toDate().toISOString()
+        : "",
+    }
+  })
 }
 
 export default async function ValidationPage() {
