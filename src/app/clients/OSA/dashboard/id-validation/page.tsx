@@ -1,3 +1,6 @@
+"use client"
+
+import { useState, useEffect } from "react"
 import { AppSidebar } from "@/components/osa-app-sidebar"
 import {
   SidebarInset,
@@ -20,34 +23,50 @@ import {
   ValidationRequest,
 } from "@/components/osa-id-validation-table"
 
-async function getRequests(): Promise<ValidationRequest[]> {
-  const snapshot = await getDocs(collection(db, "validation_requests2"))
+export default function ValidationPage() {
+  const [requests, setRequests] = useState<ValidationRequest[]>([])
+  const [loading, setLoading] = useState(true)
 
-  return snapshot.docs.map((doc) => {
-    const data = doc.data()
+  const fetchRequests = async () => {
+    try {
+      setLoading(true)
+      const snapshot = await getDocs(collection(db, "validation_requests2"))
 
-    return {
-      requestId: doc.id,
-      studentId: data.studentId,
-      studentName: data.studentName,
-      tupId: data.tupId,
-      email: data.email,
-      phoneNumber: data.phoneNumber,
-      idPicture: data.idPicture,
-      corFile: data.corFile,
-      selfiePictures: data.selfiePictures,
-      status: data.status,
+      const data = snapshot.docs.map((doc) => {
+        const docData = doc.data()
 
-      // ✅ Firestore Timestamp → string
-      requestTime: data.requestTime
-        ? data.requestTime.toDate().toISOString()
-        : "",
+        return {
+          id: doc.id,  // Add document ID for updates
+          requestId: doc.id,
+          studentId: docData.studentId,
+          studentName: docData.studentName,
+          tupId: docData.tupId,
+          email: docData.email,
+          phoneNumber: docData.phoneNumber,
+          idPicture: docData.idPicture,
+          corFile: docData.cor || docData.corFile,  // Use 'cor' first (student form field name)
+          selfiePictures: docData.selfiePictures,
+          status: docData.status,
+          rejectRemarks: docData.rejectRemarks,
+
+          // ✅ Firestore Timestamp → string
+          requestTime: docData.requestTime
+            ? docData.requestTime.toDate().toISOString()
+            : "",
+        }
+      })
+
+      setRequests(data)
+    } catch (error) {
+      console.error("Error fetching requests:", error)
+    } finally {
+      setLoading(false)
     }
-  })
-}
+  }
 
-export default async function ValidationPage() {
-  const requests = await getRequests()
+  useEffect(() => {
+    fetchRequests()
+  }, [])
 
   return (
     <SidebarProvider
@@ -73,7 +92,16 @@ export default async function ValidationPage() {
         </header>
 
         <div className="p-4">
-          <IdValidationTable requests={requests} />
+          {loading ? (
+            <div className="flex items-center justify-center p-8">
+              <div className="text-center">
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#b32032] mx-auto mb-4"></div>
+                <p>Loading requests...</p>
+              </div>
+            </div>
+          ) : (
+            <IdValidationTable requests={requests} onUpdate={fetchRequests} />
+          )}
         </div>
       </SidebarInset>
     </SidebarProvider>

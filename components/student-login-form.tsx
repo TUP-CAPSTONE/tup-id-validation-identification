@@ -3,7 +3,7 @@
 import React, { useEffect, useState } from "react";
 import { auth, db } from "@/lib/firebaseConfig";
 import { signInWithEmailAndPassword, onAuthStateChanged, signOut, GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { doc, getDoc } from "firebase/firestore";
+import { collection, doc, getDoc, getDocs, query, where } from "firebase/firestore";
 import { useRouter } from "next/navigation";
 
 import { cn } from "@/lib/utils";
@@ -44,19 +44,32 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
       }
 
       try {
-        // Fetch user document from users collection
-        const userRef = doc(db, USERS_COLLECTION, user.uid);
-        const userSnap = await getDoc(userRef);
-        
-        if (!userSnap.exists()) {
+        // Fetch user document from users collection (doc id is TUPID)
+        let userData: any = null;
+        const userQuery = query(
+          collection(db, USERS_COLLECTION),
+          where("uid", "==", user.uid)
+        );
+        const userSnap = await getDocs(userQuery);
+
+        if (!userSnap.empty) {
+          userData = userSnap.docs[0].data();
+        } else {
+          // Fallback for older records that used UID as document id
+          const legacyRef = doc(db, USERS_COLLECTION, user.uid);
+          const legacySnap = await getDoc(legacyRef);
+          if (legacySnap.exists()) {
+            userData = legacySnap.data();
+          }
+        }
+
+        if (!userData) {
           // User not found in users collection - sign out
           await signOut(auth);
           setError("User account not found. Please contact support.");
           setCheckingAuth(false);
           return;
         }
-
-        const userData = userSnap.data();
         
         // Role Guard: Check if role is "student"
         if (userData.role !== "student") {
@@ -100,18 +113,31 @@ export function StudentLoginForm({ className, ...props }: React.ComponentProps<"
       
       const user = userCredential.user;
 
-      // Fetch user from users collection
-      const userRef = doc(db, USERS_COLLECTION, user.uid);
-      const userSnap = await getDoc(userRef);
-      
-      if (!userSnap.exists()) {
+      // Fetch user from users collection (doc id is TUPID)
+      let userData: any = null;
+      const userQuery = query(
+        collection(db, USERS_COLLECTION),
+        where("uid", "==", user.uid)
+      );
+      const userSnap = await getDocs(userQuery);
+
+      if (!userSnap.empty) {
+        userData = userSnap.docs[0].data();
+      } else {
+        // Fallback for older records that used UID as document id
+        const legacyRef = doc(db, USERS_COLLECTION, user.uid);
+        const legacySnap = await getDoc(legacyRef);
+        if (legacySnap.exists()) {
+          userData = legacySnap.data();
+        }
+      }
+
+      if (!userData) {
         await signOut(auth);
         setError("User account not found. Please contact support.");
         setLoading(false);
         return;
       }
-
-      const userData = userSnap.data();
 
       // Role Guard: Validate role === "student"
       if (userData.role !== "student") {

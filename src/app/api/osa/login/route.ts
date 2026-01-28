@@ -34,10 +34,15 @@ export async function POST(req: Request) {
 
     const userData = userSnap.data()
 
+    console.log("User data:", userData)
+    console.log("User role:", userData?.role)
+    console.log("Role check result:", userData?.role !== "OSA")
+
     /**
      * 3️⃣ Check OSA role
      */
     if (userData?.role !== "OSA") {
+      console.error(`OSA privilege check failed. Expected 'OSA', got '${userData?.role}'`)
       return NextResponse.json(
         { error: "Not authorized as OSA" },
         { status: 403 }

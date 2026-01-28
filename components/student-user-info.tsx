@@ -46,11 +46,29 @@ export default function StudentUserInfo() {
   async function fetchAndDisplayUserProfile(uid: string) {
     try {
       setLoading(true);
-      const studentRef = doc(db, process.env.NEXT_PUBLIC_FIRESTORE_STUDENTS_COLLECTION || "students", uid);
-      const snap = await getDoc(studentRef);
-      if (snap.exists()) {
-        setProfile(snap.data());
-        setEditingData(snap.data());
+      
+      // Load from student_profiles (doc id is TUPID)
+      let profileData: any = null;
+      const profileQuery = query(
+        collection(db, 'student_profiles'),
+        where('uid', '==', uid)
+      );
+      const profileSnap = await getDocs(profileQuery);
+
+      if (!profileSnap.empty) {
+        profileData = profileSnap.docs[0].data();
+      } else {
+        // Fallback to old students collection
+        const studentRef = doc(db, STUDENTS_COLLECTION, uid);
+        const snap = await getDoc(studentRef);
+        if (snap.exists()) {
+          profileData = snap.data();
+        }
+      }
+
+      if (profileData) {
+        setProfile(profileData);
+        setEditingData(profileData);
       }
 
       // Fetch upcoming validation schedule (settings/validation)
@@ -124,23 +142,31 @@ export default function StudentUserInfo() {
 
     try {
       setIsSaving(true);
-      const studentRef = doc(db, STUDENTS_COLLECTION, auth.currentUser.uid);
+      
+      // Find the student profile document (doc id is TUPID)
+      const profileQuery = query(
+        collection(db, 'student_profiles'),
+        where('uid', '==', auth.currentUser.uid)
+      );
+      const profileSnap = await getDocs(profileQuery);
+
+      if (profileSnap.empty) {
+        setError("Profile not found");
+        return;
+      }
+
+      const profileDocRef = profileSnap.docs[0].ref;
       
       const updateData: any = {
-        firstName: editingData.firstName,
-        lastName: editingData.lastName,
+        fullName: editingData.fullName,
         email: editingData.email,
         phone: editingData.phone,
+        birthDate: editingData.birthDate,
+        guardianEmail: editingData.guardianEmail,
+        guardianPhoneNumber: editingData.guardianPhoneNumber,
       };
 
-      // Only include optional fields if they exist
-      if (editingData.course) updateData.course = editingData.course;
-      if (editingData.section) updateData.section = editingData.section;
-      if (editingData.yearLevel) updateData.yearLevel = editingData.yearLevel;
-      if (editingData.studentId) updateData.studentId = editingData.studentId;
-      if (editingData.studentNumber) updateData.studentNumber = editingData.studentNumber;
-
-      await updateDoc(studentRef, updateData);
+      await updateDoc(profileDocRef, updateData);
 
       console.log('Profile updated successfully');
       setProfile(editingData);
@@ -235,7 +261,7 @@ export default function StudentUserInfo() {
                       {profile.avatar ? (
                         <img src={profile.avatar} alt="avatar" className="h-full w-full object-cover" />
                       ) : (
-                        <div className="text-red-700 font-bold text-2xl">{(profile.firstName ? profile.firstName[0] : 'T')}{(profile.lastName ? profile.lastName[0] : 'U')}</div>
+                        <div className="text-red-700 font-bold text-2xl">{profile.fullName ? profile.fullName[0].toUpperCase() : 'S'}</div>
                       )}
                     </div>
                   </div>
@@ -243,8 +269,9 @@ export default function StudentUserInfo() {
                 <input id="avatarUpload" type="file" accept="image/*" className="hidden" onChange={(e) => handleAvatarUpload(e.target.files ? e.target.files[0] : null)} disabled={uploadingAvatar} />
 
                 <div>
-                  <div className="text-2xl md:text-3xl font-bold text-red-700 leading-tight">{profile.firstName} {profile.lastName}</div>
+                  <div className="text-2xl md:text-3xl font-bold text-red-700 leading-tight">{profile.fullName}</div>
                   <div className="text-sm md:text-base text-red-700/90">{profile.email}</div>
+                  <div className="text-xs text-red-600 mt-1">{profile.studentNumber}</div>
                   {uploadingAvatar && <div className="text-xs text-red-600 mt-1">Uploading...</div>}
                   {avatarError && <div className="text-xs text-red-600 mt-1">{avatarError}</div>}
                 </div>
@@ -265,34 +292,115 @@ export default function StudentUserInfo() {
               <div className="space-y-6">
                 <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-[#b32032] mb-2">First Name</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-[#b32032] mb-2">Full Name *</label>
                     {editMode ? (
                       <input
                         type="text"
-                        value={editingData?.firstName || ''}
-                        onChange={(e) => updateUserField('firstName', e.target.value)}
+                        value={editingData?.fullName || ''}
+                        onChange={(e) => updateUserField('fullName', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#b32032]"
                       />
                     ) : (
                       <div className="px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-900">
-                        {profile.firstName}
+                        {profile.fullName}
                       </div>
                     )}
                   </div>
                   <div>
-                    <label className="block text-xs font-semibold uppercase tracking-wide text-[#b32032] mb-2">Last Name</label>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-[#b32032] mb-2">TUP ID</label>
+                    <div className="px-3 py-2 border border-gray-200 rounded-md bg-gray-100 text-gray-600">
+                      {profile.studentNumber}
+                    </div>
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-[#b32032] mb-2">Birth Date *</label>
                     {editMode ? (
                       <input
-                        type="text"
-                        value={editingData?.lastName || ''}
-                        onChange={(e) => updateUserField('lastName', e.target.value)}
+                        type="date"
+                        value={editingData?.birthDate || ''}
+                        onChange={(e) => updateUserField('birthDate', e.target.value)}
                         className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#b32032]"
                       />
                     ) : (
                       <div className="px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-900">
-                        {profile.lastName}
+                        {profile.birthDate || 'Not provided'}
                       </div>
                     )}
+                  </div>
+
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-[#b32032] mb-2">Email *</label>
+                    {editMode ? (
+                      <input
+                        type="email"
+                        value={editingData?.email || ''}
+                        onChange={(e) => updateUserField('email', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#b32032]"
+                      />
+                    ) : (
+                      <div className="px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-900">
+                        {profile.email}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  <div>
+                    <label className="block text-xs font-semibold uppercase tracking-wide text-[#b32032] mb-2">Student Phone Number *</label>
+                    {editMode ? (
+                      <input
+                        type="tel"
+                        value={editingData?.phone || ''}
+                        onChange={(e) => updateUserField('phone', e.target.value)}
+                        className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#b32032]"
+                      />
+                    ) : (
+                      <div className="px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-900">
+                        {profile.phone || 'Not provided'}
+                      </div>
+                    )}
+                  </div>
+                </div>
+
+                <div className="pt-4 border-t border-gray-200">
+                  <h3 className="text-sm font-bold text-[#b32032] mb-4 uppercase tracking-wide">Guardian Information</h3>
+                  
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-[#b32032] mb-2">Guardian Email *</label>
+                      {editMode ? (
+                        <input
+                          type="email"
+                          value={editingData?.guardianEmail || ''}
+                          onChange={(e) => updateUserField('guardianEmail', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#b32032]"
+                        />
+                      ) : (
+                        <div className="px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-900">
+                          {profile.guardianEmail || 'Not provided'}
+                        </div>
+                      )}
+                    </div>
+
+                    <div>
+                      <label className="block text-xs font-semibold uppercase tracking-wide text-[#b32032] mb-2">Guardian Phone Number *</label>
+                      {editMode ? (
+                        <input
+                          type="tel"
+                          value={editingData?.guardianPhoneNumber || ''}
+                          onChange={(e) => updateUserField('guardianPhoneNumber', e.target.value)}
+                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#b32032]"
+                        />
+                      ) : (
+                        <div className="px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-900">
+                          {profile.guardianPhoneNumber || 'Not provided'}
+                        </div>
+                      )}
+                    </div>
                   </div>
                 </div>
 

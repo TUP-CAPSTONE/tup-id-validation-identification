@@ -64,18 +64,30 @@ export function AdminLoginForm({
         body: JSON.stringify({ token }),
       })
 
+      console.log("Admin login response status:", res.status)
+
       if (!res.ok) {
         await signOut(auth)
-        throw new Error("You do not have admin privileges")
+        let errorMessage = "You do not have admin privileges"
+        try {
+          const errorData = await res.json()
+          console.log("Admin login error data:", errorData)
+          errorMessage = errorData.error || errorMessage
+        } catch (e) {
+          // JSON parse failed, use default message
+        }
+        throw new Error(errorMessage)
       }
+
+      console.log("Admin login successful, redirecting...")
 
       /**
        * 4️⃣ Success → redirect
        */
-      router.replace("/clients/admin")
+      router.replace("/clients/admin/dashboard")
     } catch (err: any) {
       console.error("Admin login error:", err)
-      setError("Invalid email or password")
+      setError(err instanceof Error ? err.message : "Invalid email or password")
     } finally {
       setLoading(false)
     }

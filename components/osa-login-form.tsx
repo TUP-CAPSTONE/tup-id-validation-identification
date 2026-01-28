@@ -65,7 +65,14 @@ export function OsaLoginForm({
 
       if (!res.ok) {
         await signOut(auth)
-        throw new Error("You do not have OSA privileges")
+        let errorMessage = "You do not have OSA privileges"
+        try {
+          const errorData = await res.json()
+          errorMessage = errorData.error || errorMessage
+        } catch (e) {
+          // JSON parse failed, use default message
+        }
+        throw new Error(errorMessage)
       }
 
       /**
@@ -74,7 +81,7 @@ export function OsaLoginForm({
       router.replace("/clients/OSA/dashboard")
     } catch (err) {
       console.error("OSA login error:", err)
-      setError("Invalid email or password")
+      setError(err instanceof Error ? err.message : "Invalid email or password")
     } finally {
       setLoading(false)
     }

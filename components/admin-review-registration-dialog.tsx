@@ -35,15 +35,37 @@ export function ReviewRegistrationDialog({
     if (isFinalized) return
 
     setProcessing(true)
-    await fetch("/api/admin/manage-requests/accept", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      credentials: "include",
-      body: JSON.stringify({ requestId: request.id }),
-    })
-    setProcessing(false)
-    onOpenChange(false)
-    onActionComplete()
+    try {
+      const response = await fetch("/api/admin/manage-requests/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        credentials: "include",
+        body: JSON.stringify({ requestId: request.id }),
+      })
+      
+      const data = await response.json()
+      
+      if (!response.ok) {
+        console.error("Accept failed:", data.error)
+        alert("Failed to accept registration: " + (data.error || "Unknown error"))
+        setProcessing(false)
+        return
+      }
+      
+      console.log("Registration accepted successfully")
+      
+      // First call the callback to refetch data
+      onActionComplete()
+      
+      // Then close the dialog after a brief delay to ensure data is fetched
+      setTimeout(() => {
+        onOpenChange(false)
+      }, 500)
+    } catch (error) {
+      console.error("Accept error:", error)
+      alert("Error accepting registration: " + String(error))
+      setProcessing(false)
+    }
   }
 
   const statusColor = {
@@ -67,15 +89,18 @@ export function ReviewRegistrationDialog({
 
           {/* Details */}
           <div className="grid grid-cols-2 gap-x-6 gap-y-3 text-lg">
-            <Detail label="Full Name" value={`${request.firstName} ${request.lastName}`} />
+            <Detail label="Full Name" value={request.fullName} />
             <Detail label="Student Number" value={request.studentNumber} />
-            <Detail label="Section" value={request.section} />
-            <Detail label="Course" value={request.course} />
-            <Detail label="Year Level" value={String(request.yearLevel)} />
-            <Detail label="Phone" value={request.phone} />
+            <Detail label="Email" value={request.email} />
+            <Detail label="Phone" value={request.phone || "—"} />
+            <Detail label="Birth Date" value={request.bday || "—"} />
             <Detail
               label="Requested At"
-              value={new Date(request.requestedAt.seconds * 1000).toLocaleString()}
+              value={
+                request.requestedAt?.seconds
+                  ? new Date(request.requestedAt.seconds * 1000).toLocaleString()
+                  : "—"
+              }
               full
             />
             <Detail label="Remarks" value={request.remarks || "—"} full />

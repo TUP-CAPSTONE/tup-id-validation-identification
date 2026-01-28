@@ -14,6 +14,12 @@ import {
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog";
 
 export function StudentRegistrationForm({
   className,
@@ -40,6 +46,7 @@ export function StudentRegistrationForm({
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
+  const [showSuccessDialog, setShowSuccessDialog] = useState(false);
   const [loading, setLoading] = useState(false);
   const [validatingGuardianEmail, setValidatingGuardianEmail] = useState(false);
   const [googleLoading, setGoogleLoading] = useState(false);
@@ -128,6 +135,7 @@ export function StudentRegistrationForm({
       });
 
       setSuccess("Registration submitted successfully! Your information has been saved. You will be notified once your account is approved.");
+      setShowSuccessDialog(true);
 
       // Clear form
       setFormData({
@@ -227,10 +235,12 @@ export function StudentRegistrationForm({
         guardian_phone_number: formData.guardian_phone_number,
         createdAt: serverTimestamp(),
         status: "pending",
+        uid: googleUserData.uid,
         authProvider: "google"
       });
 
       setSuccess("Registration submitted with Google account! Your information has been saved. You will be notified once your account is approved.");
+      setShowSuccessDialog(true);
 
       // Clear form and Google data
       setFormData({
@@ -489,6 +499,31 @@ export function StudentRegistrationForm({
           </FieldGroup>
         </div>
       </div>
+
+      <Dialog open={showSuccessDialog} onOpenChange={setShowSuccessDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle className="text-2xl font-bold text-[#b32032]">
+              Thank you for registering!
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4 text-base text-gray-700">
+            <p>
+              Your registration request has been received. Your account is now
+              waiting for approval by the administrator.
+            </p>
+            <p>
+              Please check your email for updates. You may close this window and
+              wait for confirmation.
+            </p>
+          </div>
+          <div className="flex justify-end pt-4">
+            <Button onClick={() => setShowSuccessDialog(false)}>
+              Close
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

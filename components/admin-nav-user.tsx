@@ -41,42 +41,38 @@ export function AdminNavUser() {
 
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (authUser) => {
+      // Check if session cookie exists (admin is logged in via session)
+      try {
+        const sessionRes = await fetch("/api/auth/verify-session", {
+          method: "GET",
+          credentials: "include",
+        })
+
+        if (sessionRes.ok) {
+          // Session is valid, set user info
+          setUser({
+            name: authUser?.displayName || "Admin",
+            email: authUser?.email || "admin@tup.edu.ph",
+            avatar: "/avatars/shadcn.jpg",
+          })
+          return
+        }
+      } catch (err) {
+        console.log("Session check failed")
+      }
+
+      // No session, redirect to login
       if (!authUser) {
         router.replace("/clients/admin/login")
         return
       }
 
+      // Auth user exists but no session - logout
       try {
-        /**
-         * 🔐 Verify admin role via Admin SDK
-         */
-        const token = await authUser.getIdToken(true)
-
-        const res = await fetch("/api/admin/login", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          credentials: "include",
-          body: JSON.stringify({ token }),
-        })
-
-        if (!res.ok) {
-          await signOut(auth)
-          router.replace("/clients/admin/login")
-          return
-        }
-
-        /**
-         * ✅ Authorized admin
-         */
-        setUser({
-          name: authUser.displayName || "Admin",
-          email: authUser.email || "admin@tup.edu.ph",
-          avatar: "/avatars/shadcn.jpg",
-        })
-      } catch (err) {
-        console.error("Admin verification failed:", err)
         await signOut(auth)
         router.replace("/clients/admin/login")
+      } catch (err) {
+        console.error("Logout error:", err)
       }
     })
 
@@ -85,6 +81,13 @@ export function AdminNavUser() {
 
   const handleLogout = async () => {
     try {
+      // Clear session cookie on server
+      await fetch("/api/admin/logout", {
+        method: "POST",
+        credentials: "include",
+      })
+
+      // Sign out from Firebase client
       await signOut(auth)
       router.replace("/clients/admin/login")
     } catch (err) {

@@ -5,8 +5,9 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
-import { auth } from "@/lib/firebaseConfig";
+import { auth, db } from "@/lib/firebaseConfig";
 import { signOut } from "firebase/auth";
+import { collection, getDocs, query, where } from "firebase/firestore";
 import { ChevronDown, ChevronUp, AlertCircle, ArrowRight, CheckCircle2, Clock } from "lucide-react";
 
 export default function StudentDashboard() {
@@ -15,6 +16,47 @@ export default function StudentDashboard() {
   const [error, setError] = useState<string | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [user, setUser] = useState<any>(null);
+  const [validationStatus, setValidationStatus] = useState<
+    "not_submitted" | "pending" | "accepted" | "rejected"
+  >("not_submitted");
+
+  const fetchValidationStatus = async (uid: string) => {
+    try {
+      const q = query(
+        collection(db, "validation_requests2"),
+        where("studentId", "==", uid)
+      );
+
+      const snap = await getDocs(q);
+      if (snap.empty) {
+        setValidationStatus("not_submitted");
+        return;
+      }
+
+      const docs = snap.docs.map((doc) => doc.data());
+      docs.sort((a, b) => {
+        const aTime = a.requestTime?.seconds
+          ? a.requestTime.seconds * 1000
+          : a.requestTime?.toMillis
+          ? a.requestTime.toMillis()
+          : 0;
+        const bTime = b.requestTime?.seconds
+          ? b.requestTime.seconds * 1000
+          : b.requestTime?.toMillis
+          ? b.requestTime.toMillis()
+          : 0;
+        return bTime - aTime;
+      });
+
+      const data = docs[0];
+      const status = data.status || "pending";
+      if (status === "accepted") setValidationStatus("accepted");
+      else if (status === "rejected") setValidationStatus("rejected");
+      else setValidationStatus("pending");
+    } catch (err) {
+      console.error("Failed to fetch validation status:", err);
+    }
+  };
 
   /**
    * Sets up event listeners and loads initial data
@@ -29,6 +71,7 @@ export default function StudentDashboard() {
         return;
       }
       setUser(currentUser);
+      await fetchValidationStatus(currentUser.uid);
     } catch (err: any) {
       handleErrors(err);
     } finally {
@@ -116,6 +159,35 @@ export default function StudentDashboard() {
     );
   }
 
+  const statusConfig = {
+    not_submitted: {
+      label: "Not yet submitted",
+      textClass: "text-blue-700",
+      badgeClass: "bg-blue-50 border-blue-200",
+      iconColor: "text-blue-700",
+    },
+    pending: {
+      label: "Pending review",
+      textClass: "text-yellow-700",
+      badgeClass: "bg-yellow-50 border-yellow-200",
+      iconColor: "text-yellow-700",
+    },
+    accepted: {
+      label: "Accepted",
+      textClass: "text-green-700",
+      badgeClass: "bg-green-50 border-green-200",
+      iconColor: "text-green-700",
+    },
+    rejected: {
+      label: "Rejected",
+      textClass: "text-red-700",
+      badgeClass: "bg-red-50 border-red-200",
+      iconColor: "text-red-700",
+    },
+  } as const;
+
+  const currentStatus = statusConfig[validationStatus];
+
   return (
     <div className="w-full max-w-6xl mx-auto space-y-6 px-4 py-6">
       {error && (
@@ -154,11 +226,11 @@ export default function StudentDashboard() {
             </div>
           </CardHeader>
           <CardContent className="pt-6">
-            <div className="flex items-center gap-3 bg-blue-50 border border-blue-200 rounded-lg p-4">
-              <Clock className="w-5 h-5 text-blue-700" />
+            <div className={`flex items-center gap-3 rounded-lg p-4 border ${currentStatus.badgeClass}`}>
+              <Clock className={`w-5 h-5 ${currentStatus.iconColor}`} />
               <div>
-                <p className="text-sm font-semibold text-blue-900">Status</p>
-                <p className="text-xs text-blue-700">Not yet submitted</p>
+                <p className={`text-sm font-semibold ${currentStatus.textClass}`}>Status</p>
+                <p className={`text-xs ${currentStatus.textClass}`}>{currentStatus.label}</p>
               </div>
             </div>
           </CardContent>

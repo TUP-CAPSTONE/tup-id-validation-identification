@@ -6,7 +6,7 @@ import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/com
 import { Button } from "@/components/ui/button";
 import WebcamCapture from '@/components/webcam-capture';
 import { auth, db } from "@/lib/firebaseConfig";
-import { collection, addDoc, serverTimestamp, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+import { collection, addDoc, setDoc, serverTimestamp, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
 import { ArrowLeft } from "lucide-react";
 
@@ -16,6 +16,7 @@ export default function StudentValidationRequest() {
   const [studentProfile, setStudentProfile] = useState<any>(null);
   const [existingRequest, setExistingRequest] = useState<any>(null);
   const [loading, setLoading] = useState(true);
+  const [showResubmitForm, setShowResubmitForm] = useState(false);
   
   const [corFile, setCorFile] = useState<string | null>(null);
   const [idPhoto, setIdPhoto] = useState<string | null>(null);
@@ -40,17 +41,33 @@ export default function StudentValidationRequest() {
       setCurrentUser(user);
 
       try {
-        // Get student profile
-        const studentDocRef = doc(db, 'students', user.uid);
-        const studentSnap = await getDoc(studentDocRef);
-        
-        if (studentSnap.exists()) {
-          setStudentProfile(studentSnap.data());
+        // Get student profile (new: student_profiles, doc id is TUPID)
+        let profileData: any = null;
+
+        const profileQuery = query(
+          collection(db, 'student_profiles'),
+          where('uid', '==', user.uid)
+        );
+        const profileSnap = await getDocs(profileQuery);
+
+        if (!profileSnap.empty) {
+          profileData = profileSnap.docs[0].data();
+        } else {
+          // Fallback for older records
+          const studentDocRef = doc(db, 'students', user.uid);
+          const studentSnap = await getDoc(studentDocRef);
+          if (studentSnap.exists()) {
+            profileData = studentSnap.data();
+          }
+        }
+
+        if (profileData) {
+          setStudentProfile(profileData);
         }
 
         // Check for existing validation request
         const q = query(
-          collection(db, 'Validation_Request_LATEST'),
+          collection(db, 'validation_requests2'),
           where('studentId', '==', user.uid)
         );
         const snapshot = await getDocs(q);
@@ -109,13 +126,22 @@ export default function StudentValidationRequest() {
     setError(null);
 
     try {
-      // Create document in Firestore with base64 data
-      await addDoc(collection(db, 'Validation_Request_LATEST'), {
+      const fullName =
+        studentProfile?.fullName ||
+        studentProfile?.name ||
+        `${studentProfile?.firstName || ''} ${studentProfile?.lastName || ''}`.trim() ||
+        'Unknown'
+
+      const requestData = {
         studentId: currentUser.uid,
-        tupId: studentProfile?.studentId || 'N/A',
-        studentName: `${studentProfile?.firstName || ''} ${studentProfile?.lastName || ''}`.trim() || 'Unknown',
+        tupId:
+          studentProfile?.studentNumber ||
+          studentProfile?.tup_id ||
+          studentProfile?.studentId ||
+          'N/A',
+        studentName: fullName,
         email: currentUser.email,
-        phoneNumber: studentProfile?.phone || '',
+        phoneNumber: studentProfile?.phone || studentProfile?.student_phone_num || '',
         
         // Store base64 strings directly
         cor: corFile,
@@ -128,8 +154,25 @@ export default function StudentValidationRequest() {
         },
         
         status: 'pending',
-        requestTime: serverTimestamp()
-      });
+        requestTime: serverTimestamp(),
+        rejectRemarks: null  // Clear any previous rejection remarks
+      };
+
+      // If there's an existing accepted request, prevent resubmission
+      if (existingRequest && existingRequest.status === 'accepted') {
+        setError('You have already been validated. You cannot submit another request.');
+        setSubmitting(false);
+        return;
+      }
+
+      // If there's an existing rejected request, update it (or recreate if missing)
+      if (existingRequest && existingRequest.status === 'rejected') {
+        const requestDocRef = doc(db, 'validation_requests2', existingRequest.id);
+        await setDoc(requestDocRef, requestData, { merge: true });
+      } else {
+        // Create new document
+        await addDoc(collection(db, 'validation_requests2'), requestData);
+      }
 
       setSuccess(true);
       
@@ -139,6 +182,7 @@ export default function StudentValidationRequest() {
       setFaceFront(null);
       setFaceLeft(null);
       setFaceRight(null);
+      setShowResubmitForm(false);
 
     } catch (err: any) {
       console.error('Error submitting:', err);
@@ -180,7 +224,7 @@ export default function StudentValidationRequest() {
   }
 
   // Show existing request status
-  if (existingRequest && !success) {
+  if (existingRequest && !success && !showResubmitForm) {
     return (
       <div className="w-full max-w-6xl space-y-6">
         <Button 
@@ -192,19 +236,53 @@ export default function StudentValidationRequest() {
           Back to Dashboard
         </Button>
 
-        <Card className="border-yellow-200 bg-yellow-50">
+        <Card className={`${
+          existingRequest.status === 'pending' ? 'border-yellow-200 bg-yellow-50' :
+          existingRequest.status === 'accepted' ? 'border-green-200 bg-green-50' :
+          'border-red-200 bg-red-50'
+        }`}>
           <CardHeader>
-            <CardTitle className="text-yellow-800">
+            <CardTitle className={`${
+              existingRequest.status === 'pending' ? 'text-yellow-800' :
+              existingRequest.status === 'accepted' ? 'text-green-800' :
+              'text-red-800'
+            }`}>
               {existingRequest.status === 'pending' && '⏳ Request Pending'}
-              {existingRequest.status === 'approved' && '✅ Request Approved'}
+              {existingRequest.status === 'accepted' && '✅ Request Accepted'}
               {existingRequest.status === 'rejected' && '❌ Request Rejected'}
             </CardTitle>
             <CardDescription>
               {existingRequest.status === 'pending' && 'Your validation request is being reviewed.'}
-              {existingRequest.status === 'approved' && 'Your ID has been validated!'}
-              {existingRequest.status === 'rejected' && 'Your request was rejected. Please submit a new one.'}
+              {existingRequest.status === 'accepted' && 'Your ID has been validated!'}
+              {existingRequest.status === 'rejected' && 'Your request was rejected. Please review the reason and submit a new request.'}
             </CardDescription>
           </CardHeader>
+          
+          {/* Show rejection remarks if rejected */}
+          {existingRequest.status === 'rejected' && existingRequest.rejectRemarks && (
+            <CardContent>
+              <div className="p-4 bg-red-100 border border-red-300 rounded-md">
+                <p className="font-semibold text-red-800 mb-2">Rejection Reason:</p>
+                <p className="text-red-700">{existingRequest.rejectRemarks}</p>
+              </div>
+              
+              <Button
+                onClick={() => setShowResubmitForm(true)}
+                className="mt-4 w-full bg-[#b32032] hover:bg-[#8b1828]"
+              >
+                Submit New Request
+              </Button>
+            </CardContent>
+          )}
+
+          {/* Show message if accepted - no action button */}
+          {existingRequest.status === 'accepted' && (
+            <CardContent>
+              <p className="text-green-700">
+                Your ID validation has been accepted. You can proceed with your application.
+              </p>
+            </CardContent>
+          )}
         </Card>
       </div>
     );

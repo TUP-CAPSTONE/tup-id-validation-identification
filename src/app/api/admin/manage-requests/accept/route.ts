@@ -52,7 +52,7 @@ export async function POST(req: Request) {
 
     const data = snap.data()!
 
-    if (data.status !== "Pending") {
+    if (data.status !== "pending") {
       return NextResponse.json(
         { error: "Request already processed" },
         { status: 400 }
@@ -65,7 +65,7 @@ export async function POST(req: Request) {
 
     // Firebase Auth check
     try {
-      await adminAuth.getUserByEmail(data.email)
+      await adminAuth.getUserByEmail(data.student_email)
       return NextResponse.json(
         { error: "Email already exists in authentication" },
         { status: 400 }
@@ -75,7 +75,7 @@ export async function POST(req: Request) {
     // Firestore users check
     const existingUserSnap = await adminDB
       .collection("users")
-      .where("email", "==", data.email)
+      .where("email", "==", data.student_email)
       .limit(1)
       .get()
 
@@ -90,41 +90,48 @@ export async function POST(req: Request) {
        ✅ CREATE AUTH USER
     -------------------------------- */
     const userRecord = await adminAuth.createUser({
-      email: data.email,
-      password: data.studentNumber,
-      displayName: `${data.firstName} ${data.lastName}`,
+      email: data.student_email,
+      password: data.tup_id,
+      displayName: data.name,
     })
 
-    await adminDB.collection("users").doc(userRecord.uid).set({
+    const studentDocId = data.tup_id
+
+    await adminDB.collection("users").doc(studentDocId).set({
       uid: userRecord.uid,
-      email: data.email,
-      fullName: `${data.firstName} ${data.lastName}`,
+      studentNumber: data.tup_id,
+      email: data.student_email,
+      fullName: data.name,
       role: "student",
       accountStatus: "active",
       createdAt: new Date(),
     })
 
-    await adminDB.collection("student_profiles").doc(userRecord.uid).set({
+    await adminDB.collection("student_profiles").doc(studentDocId).set({
       uid: userRecord.uid,
-      email: data.email,
-      fullName: `${data.firstName} ${data.lastName}`,
-      phone: data.phone,
-      course: data.course,
-      yearLevel: data.yearLevel,
-      section: data.section,
-      studentNumber: data.studentNumber,
+      studentNumber: data.tup_id,
+      email: data.student_email,
+      fullName: data.name,
+      phone: data.student_phone_num,
+      birthDate: data.bday,
+      guardianEmail: data.guardian_email,
+      guardianPhoneNumber: data.guardian_phone_number,
       accountStatus: "active",
       createdAt: new Date(),
       isOnboarded: false,
       isValidated: false,
     })
 
+    console.log("Updating registration request with ID:", requestId);
+    
     await requestRef.update({
       status: "Accepted",
       remarks: "Accepted",
       reviewedBy: adminName,
       processedAt: new Date(),
     })
+
+    console.log("Registration request updated successfully");
 
     return NextResponse.json({ success: true })
   } catch (error: any) {

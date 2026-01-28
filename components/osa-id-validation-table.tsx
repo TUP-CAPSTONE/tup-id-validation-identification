@@ -10,6 +10,7 @@ import { DataTable } from "@/components/osa-data-table"
 import { IdValidationDialog } from "./osa-id-validation-dialog"
 
 export type ValidationRequest = {
+  id?: string
   requestId: string
   studentId: string
   studentName: string
@@ -25,16 +26,24 @@ export type ValidationRequest = {
   corFile: string;
   status: "pending" | "accepted" | "rejected"
   requestTime: string
+  rejectRemarks?: string
 }
 
 interface Props {
   requests: ValidationRequest[]
+  onUpdate?: () => void
 }
 
-export function IdValidationTable({ requests }: Props) {
+export function IdValidationTable({ requests, onUpdate }: Props) {
   const [selected, setSelected] =
     useState<ValidationRequest | null>(null)
   const [open, setOpen] = useState(false)
+
+  const handleUpdate = () => {
+    setOpen(false)
+    setSelected(null)
+    if (onUpdate) onUpdate()
+  }
 
   const cellBase = "flex items-center h-full"
   const sortableHeader =
@@ -149,6 +158,7 @@ export function IdValidationTable({ requests }: Props) {
         open={open}
         onClose={() => setOpen(false)}
         request={selected}
+        onUpdate={handleUpdate}
       />
     </>
   )
