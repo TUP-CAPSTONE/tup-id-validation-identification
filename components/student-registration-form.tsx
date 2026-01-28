@@ -52,6 +52,10 @@ export function StudentRegistrationForm({
   const [googleLoading, setGoogleLoading] = useState(false);
   const [showGoogleForm, setShowGoogleForm] = useState(false);
   const [googleUserData, setGoogleUserData] = useState<{ uid: string; email: string; displayName: string } | null>(null);
+  const [showVerification, setShowVerification] = useState(false);
+  const [verificationCodes, setVerificationCodes] = useState({ student: "", guardian: "" });
+  const [sentCodes, setSentCodes] = useState({ student: "", guardian: "" });
+  const [sendingCodes, setSendingCodes] = useState(false);
   
   // Guardian email validation function
   const validateGuardianEmail = async (email: string): Promise<boolean> => {
@@ -79,6 +83,123 @@ export function StudentRegistrationForm({
       return false;
     } finally {
       setValidatingGuardianEmail(false);
+    }
+  };
+
+  const sendVerificationCodes = async () => {
+    setError("");
+    setSendingCodes(true);
+
+    // Validation
+    if (
+      !formData.name ||
+      !formData.tup_id ||
+      !formData.bday ||
+      !formData.student_email ||
+      !formData.student_phone_num ||
+      !formData.guardian_email ||
+      !formData.guardian_phone_number
+    ) {
+      setError("Please fill in all required fields");
+      setSendingCodes(false);
+      return;
+    }
+
+    // Validate guardian email format
+    const isGuardianEmailValid = await validateGuardianEmail(formData.guardian_email);
+    if (!isGuardianEmailValid) {
+      setError("Guardian email is invalid or not recognized. Please use a valid email address.");
+      setSendingCodes(false);
+      return;
+    }
+
+    try {
+      // Send verification codes to both emails
+      const response = await fetch('/api/send-verification', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          studentEmail: formData.student_email,
+          guardianEmail: formData.guardian_email,
+          studentName: formData.name
+        })
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        throw new Error(data.error || 'Failed to send verification codes');
+      }
+
+      // Store codes for verification (in production, codes should be stored server-side)
+      setSentCodes({ student: data.studentCode, guardian: data.guardianCode });
+      setShowVerification(true);
+      setSuccess("Verification codes sent! Please check both email inboxes.");
+
+    } catch (err: any) {
+      setError(err?.message || "Failed to send verification codes. Please check if the emails are valid.");
+    } finally {
+      setSendingCodes(false);
+    }
+  };
+
+  const verifyCodesAndSubmit = async () => {
+    setError("");
+    setLoading(true);
+
+    // Verify codes
+    if (verificationCodes.student !== sentCodes.student || verificationCodes.guardian !== sentCodes.guardian) {
+      setError("Invalid verification codes. Please check your emails and try again.");
+      setLoading(false);
+      return;
+    }
+
+    try {
+      // Check if TUP ID already exists in registration_requests
+      const qReqs = query(
+        collection(db, REG_REQUESTS_COLLECTION), 
+        where("tup_id", "==", formData.tup_id)
+      );
+      const snapReqs = await getDocs(qReqs);
+      if (!snapReqs.empty) {
+        throw new Error("This TUP ID is already registered. Contact admin if this is a mistake.");
+      }
+
+      // Use TUP ID as document ID and save registration data (no auth account creation)
+      await setDoc(doc(db, REG_REQUESTS_COLLECTION, formData.tup_id), {
+        name: formData.name,
+        tup_id: formData.tup_id,
+        bday: formData.bday,
+        student_email: formData.student_email,
+        student_phone_num: formData.student_phone_num,
+        guardian_email: formData.guardian_email,
+        guardian_phone_number: formData.guardian_phone_number,
+        createdAt: serverTimestamp(),
+        status: "pending",
+        emailsVerified: true
+      });
+
+      setSuccess("Registration submitted successfully! Your emails have been verified and your information has been saved. You will be notified once your account is approved.");
+
+      // Clear form
+      setFormData({
+        name: "",
+        tup_id: "",
+        bday: "",
+        student_email: "",
+        student_phone_num: "",
+        guardian_email: "",
+        guardian_phone_number: "",
+      });
+      setShowVerification(false);
+      setVerificationCodes({ student: "", guardian: "" });
+      setSentCodes({ student: "", guardian: "" });
+
+    } catch (err) {
+      const e: any = err;
+      setError(e?.message || "Registration failed");
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -266,7 +387,16 @@ export function StudentRegistrationForm({
   const [currentTime, setCurrentTime] = useState("");
 
   useEffect(() => {
+    // Set initial time
     setCurrentTime(formatDateTime());
+    
+    // Update time every second
+    const interval = setInterval(() => {
+      setCurrentTime(formatDateTime());
+    }, 1000);
+
+    // Cleanup interval on unmount
+    return () => clearInterval(interval);
   }, []);
 
   return (
@@ -298,6 +428,79 @@ export function StudentRegistrationForm({
               <div className="p-4 rounded-lg bg-green-50 border border-green-200 text-green-800 text-sm font-medium">{success}</div>
             )}
 
+            {showVerification && (
+              <div className="p-4 rounded-lg bg-blue-50 border border-blue-200">
+                <h3 className="font-semibold text-blue-900 mb-3">Email Verification Required</h3>
+                <p className="text-sm text-blue-800 mb-4">
+                  We've sent verification codes to both email addresses. Please enter them below to complete your registration.
+                </p>
+                <div className="space-y-3">
+                  <Field>
+                    <FieldLabel className="text-sm font-semibold text-gray-700 mb-2">
+                      Student Email Verification Code
+                    </FieldLabel>
+                    <Input
+                      type="text"
+                      placeholder="Enter 6-digit code"
+                      value={verificationCodes.student}
+                      onChange={(e) => setVerificationCodes({ ...verificationCodes, student: e.target.value })}
+                      disabled={loading}
+                      className="h-10 w-full rounded-md border border-gray-300 bg-white px-3"
+                      maxLength={6}
+                    />
+                    <FieldDescription className="text-xs text-gray-600 mt-1">
+                      Code sent to: {formData.student_email}
+                    </FieldDescription>
+                  </Field>
+                  <Field>
+                    <FieldLabel className="text-sm font-semibold text-gray-700 mb-2">
+                      Guardian Email Verification Code
+                    </FieldLabel>
+                    <Input
+                      type="text"
+                      placeholder="Enter 6-digit code"
+                      value={verificationCodes.guardian}
+                      onChange={(e) => setVerificationCodes({ ...verificationCodes, guardian: e.target.value })}
+                      disabled={loading}
+                      className="h-10 w-full rounded-md border border-gray-300 bg-white px-3"
+                      maxLength={6}
+                    />
+                    <FieldDescription className="text-xs text-gray-600 mt-1">
+                      Code sent to: {formData.guardian_email}
+                    </FieldDescription>
+                  </Field>
+                  <div className="flex gap-2 pt-2">
+                    <Button
+                      onClick={verifyCodesAndSubmit}
+                      disabled={loading || !verificationCodes.student || !verificationCodes.guardian}
+                      className="flex-1 bg-[#b32032] hover:bg-[#951928]"
+                    >
+                      {loading ? "Verifying..." : "Verify and Complete Registration"}
+                    </Button>
+                    <Button
+                      variant="outline"
+                      onClick={() => {
+                        setShowVerification(false);
+                        setVerificationCodes({ student: "", guardian: "" });
+                        setError("");
+                      }}
+                      disabled={loading}
+                    >
+                      Cancel
+                    </Button>
+                  </div>
+                  <Button
+                    variant="outline"
+                    className="w-full"
+                    onClick={sendVerificationCodes}
+                    disabled={sendingCodes}
+                  >
+                    {sendingCodes ? "Resending..." : "Resend Codes"}
+                  </Button>
+                </div>
+              </div>
+            )}
+
             {showGoogleForm && googleUserData && (
               <div className="mb-4 p-3 rounded bg-blue-50 border border-blue-200 text-blue-800">
                 <p className="font-semibold mb-1">Signing up with Google</p>
@@ -318,7 +521,7 @@ export function StudentRegistrationForm({
                   placeholder="Juan Dela Cruz"
                   value={formData.name}
                   onChange={(e) => setFormData({ ...formData, name: e.target.value })}
-                  disabled={loading || (showGoogleForm && !!googleUserData)}
+                  disabled={loading || showVerification || (showGoogleForm && !!googleUserData)}
                   className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
                   required
                 />
@@ -334,7 +537,7 @@ export function StudentRegistrationForm({
                   placeholder="TUPM-22-1234"
                   value={formData.tup_id}
                   onChange={(e) => setFormData({ ...formData, tup_id: e.target.value.toUpperCase() })}
-                  disabled={loading || (showGoogleForm && !!googleUserData)}
+                  disabled={loading || showVerification || (showGoogleForm && !!googleUserData)}
                   className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
                   required
                 />
@@ -349,7 +552,7 @@ export function StudentRegistrationForm({
                   type="date"
                   value={formData.bday}
                   onChange={(e) => setFormData({ ...formData, bday: e.target.value })}
-                  disabled={loading || (showGoogleForm && !!googleUserData)}
+                  disabled={loading || showVerification || (showGoogleForm && !!googleUserData)}
                   className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
                   required
                 />
@@ -365,7 +568,7 @@ export function StudentRegistrationForm({
                   placeholder="student@tup.edu.ph"
                   value={formData.student_email}
                   onChange={(e) => setFormData({ ...formData, student_email: e.target.value })}
-                  disabled={loading || (showGoogleForm && !!googleUserData)}
+                  disabled={loading || showVerification || (showGoogleForm && !!googleUserData)}
                   className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
                   required
                 />
@@ -381,7 +584,7 @@ export function StudentRegistrationForm({
                   placeholder="09123456789"
                   value={formData.student_phone_num}
                   onChange={(e) => setFormData({ ...formData, student_phone_num: e.target.value })}
-                  disabled={loading || (showGoogleForm && !!googleUserData)}
+                  disabled={loading || showVerification || (showGoogleForm && !!googleUserData)}
                   className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
                   required
                 />
@@ -406,12 +609,12 @@ export function StudentRegistrationForm({
                     placeholder="guardian@example.com"
                     value={formData.guardian_email}
                     onChange={(e) => setFormData({ ...formData, guardian_email: e.target.value })}
-                    disabled={loading || validatingGuardianEmail}
+                    disabled={loading || showVerification || validatingGuardianEmail}
                     className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
                     required
                   />
                   <FieldDescription className="text-xs text-gray-500 mt-1">
-                    We will validate this email address before submission
+                    A verification code will be sent to this email
                   </FieldDescription>
                 </Field>
 
@@ -425,7 +628,7 @@ export function StudentRegistrationForm({
                     placeholder="09123456789"
                     value={formData.guardian_phone_number}
                     onChange={(e) => setFormData({ ...formData, guardian_phone_number: e.target.value })}
-                    disabled={loading || (showGoogleForm && !!googleUserData)}
+                    disabled={loading || showVerification || (showGoogleForm && !!googleUserData)}
                     className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
                     required
                   />
@@ -434,14 +637,14 @@ export function StudentRegistrationForm({
             </div>
 
             <Field>
-              {!showGoogleForm ? (
+              {!showGoogleForm && !showVerification ? (
                 <>
                   <Button
-                    onClick={handleSubmit}
-                    disabled={loading || googleLoading}
+                    onClick={sendVerificationCodes}
+                    disabled={loading || googleLoading || sendingCodes}
                     className="w-full bg-[#b32032] hover:bg-[#951928]"
                   >
-                    {loading ? "Submitting..." : validatingGuardianEmail ? "Validating..." : "Submit Registration"}
+                    {sendingCodes ? "Sending Codes..." : "Send Verification Codes"}
                   </Button>
                   <Button
                     variant="outline"
@@ -453,7 +656,7 @@ export function StudentRegistrationForm({
                     {googleLoading ? "Signing in with Google..." : "Register with Google"}
                   </Button>
                 </>
-              ) : (
+              ) : showGoogleForm ? (
                 <>
                   <Button
                     onClick={handleGoogleFormSubmit}
@@ -484,7 +687,7 @@ export function StudentRegistrationForm({
                     Cancel
                   </Button>
                 </>
-              )}
+              ) : null}
               
               <FieldDescription className="text-center mt-4">
                 Already have an account?{" "}

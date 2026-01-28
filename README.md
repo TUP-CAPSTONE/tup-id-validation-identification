@@ -2,7 +2,33 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ## Getting Started
 
-First, run the development server:
+### 1. Install Dependencies
+
+```bash
+npm install
+```
+
+### 2. Set Up Environment Variables
+
+**IMPORTANT:** For email verification to work, you need to create a `.env.local` file.
+
+**Quick Setup (Recommended):**
+```bash
+# Run the setup script (Windows)
+.\setup-env.ps1
+```
+
+**Manual Setup:**
+```bash
+# Copy the example file
+copy .env.example .env.local
+```
+
+Then ask a team member for the email credentials and update `.env.local`.
+
+**Note:** Never commit `.env.local` to git. The setup script will create it automatically with the correct credentials.
+
+### 3. Run the Development Server
 
 ```bash
 npm run dev
