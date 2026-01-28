@@ -84,7 +84,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
       collapsible="offcanvas"
       style={{ "--sidebar-width": "280px" } as React.CSSProperties}
     >
-      <SidebarHeader className="h-20 border-b border-[#dca0ad] bg-gradient-to-b from-[#c62c3f] to-[#b32032] text-white flex flex-row items-center justify-between px-3 shadow-sm">
+      <SidebarHeader className="h-20 border-b border-[#dca0ad] bg-linear-to-b from-[#c62c3f] to-[#b32032] text-white flex flex-row items-center justify-between px-3 shadow-sm">
         <NavUser user={userData} />
         <SidebarTrigger className="ml-auto size-10 rounded-full bg-white/10 text-white hover:bg-white/20 transition" />
       </SidebarHeader>

@@ -105,7 +105,7 @@ export function FeedbackReportForm({
         payload.deviceInfo = deviceInfo
       }
 
-      const res = await fetch("/api/feedback-reports", {
+      const res = await fetch("/api/send-feedback-reports", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(payload),
