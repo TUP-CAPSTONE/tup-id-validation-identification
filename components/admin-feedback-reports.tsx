@@ -2,11 +2,23 @@
 
 import { useEffect, useMemo, useState } from "react"
 import { Button } from "@/components/ui/button"
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/components/ui/card"
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+  CardDescription,
+} from "@/components/ui/card"
 import { Badge } from "@/components/ui/badge"
 import { Separator } from "@/components/ui/separator"
 import { Textarea } from "@/components/ui/textarea"
-import { Loader2, Bug, MessageSquareText, CheckCircle2 } from "lucide-react"
+import {
+  Loader2,
+  Bug,
+  MessageSquareText,
+  CheckCircle2,
+  RefreshCw,
+} from "lucide-react"
 
 import {
   Dialog,
@@ -46,10 +58,24 @@ type ReportItem = {
   resolutionNotes?: string
 }
 
+function formatLastUpdated(d: Date | null) {
+  if (!d) return "—"
+  // Example: Jan 29, 2026 • 3:14 PM
+  return d.toLocaleString(undefined, {
+    month: "short",
+    day: "2-digit",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  })
+}
+
 export function AdminFeedbackReports() {
   const [tab, setTab] = useState<ReportType>("feedback")
   const [loading, setLoading] = useState(true)
+  const [refreshing, setRefreshing] = useState(false)
   const [reports, setReports] = useState<ReportItem[]>([])
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
 
   // resolve dialog
   const [resolveOpen, setResolveOpen] = useState(false)
@@ -57,10 +83,15 @@ export function AdminFeedbackReports() {
   const [resolutionNotes, setResolutionNotes] = useState("")
   const [resolveLoading, setResolveLoading] = useState(false)
 
-  async function fetchReports() {
-    setLoading(true)
+  async function fetchReports(mode: "initial" | "refresh" = "initial") {
+    if (mode === "initial") setLoading(true)
+    if (mode === "refresh") setRefreshing(true)
+
     try {
-      const res = await fetch("/api/admin/feedback-reports", { method: "GET" })
+      const res = await fetch("/api/admin/feedback-reports", {
+        method: "GET",
+        cache: "no-store",
+      })
 
       // in case endpoint is wrong, show the real response text
       const text = await res.text()
@@ -74,23 +105,31 @@ export function AdminFeedbackReports() {
       }
 
       setReports(data?.reports ?? [])
+      setLastUpdated(new Date())
     } catch (err) {
       console.error(err)
     } finally {
-      setLoading(false)
+      if (mode === "initial") setLoading(false)
+      if (mode === "refresh") setRefreshing(false)
     }
   }
 
   useEffect(() => {
-    fetchReports()
+    fetchReports("initial")
   }, [])
 
-  const filtered = useMemo(() => reports.filter((r) => r.type === tab), [reports, tab])
+  const filtered = useMemo(
+    () => reports.filter((r) => r.type === tab),
+    [reports, tab]
+  )
 
   const overallRating = useMemo(() => {
-    const feedbacks = reports.filter((r) => r.type === "feedback" && typeof r.rating === "number")
+    const feedbacks = reports.filter(
+      (r) => r.type === "feedback" && typeof r.rating === "number"
+    )
     if (feedbacks.length === 0) return null
-    const avg = feedbacks.reduce((acc, r) => acc + (r.rating || 0), 0) / feedbacks.length
+    const avg =
+      feedbacks.reduce((acc, r) => acc + (r.rating || 0), 0) / feedbacks.length
     return Number(avg.toFixed(2))
   }, [reports])
 
@@ -135,7 +174,7 @@ export function AdminFeedbackReports() {
       setResolveOpen(false)
       setSelectedBug(null)
       setResolutionNotes("")
-      await fetchReports()
+      await fetchReports("refresh")
     } catch (err) {
       console.error(err)
       alert((err as any)?.message || "Something went wrong.")
@@ -148,7 +187,6 @@ export function AdminFeedbackReports() {
     <div className="space-y-4">
       {/* Toggle */}
       <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-        
         <div className="flex gap-2 w-full">
           <Button
             variant={tab === "feedback" ? "default" : "outline"}
@@ -195,15 +233,48 @@ export function AdminFeedbackReports() {
 
       {/* List */}
       <Card className="rounded-2xl shadow-sm">
-        <CardHeader>
-          <CardTitle className="text-lg">
-            {tab === "feedback" ? "Feedback Submissions" : "Bug Reports"}
-          </CardTitle>
-          <CardDescription>
-            {tab === "feedback"
-              ? "All feedback entries submitted by users."
-              : "Resolve bugs and write resolution notes."}
-          </CardDescription>
+        {/* Header with reload + last updated */}
+        <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
+          <div>
+            <CardTitle className="text-lg">
+              {tab === "feedback" ? "Feedback Submissions" : "Bug Reports"}
+            </CardTitle>
+            <CardDescription>
+              {tab === "feedback"
+                ? "All feedback entries submitted by users."
+                : "Resolve bugs and write resolution notes."}
+            </CardDescription>
+          </div>
+
+          <div className="flex flex-col items-start gap-2 sm:items-end">
+            <div className="flex items-center gap-2">
+              <Button
+                variant="outline"
+                className="rounded-xl"
+                onClick={() => fetchReports("refresh")}
+                disabled={loading || refreshing}
+              >
+                {refreshing ? (
+                  <>
+                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    Reloading...
+                  </>
+                ) : (
+                  <>
+                    <RefreshCw className="mr-2 h-4 w-4" />
+                    Reload
+                  </>
+                )}
+              </Button>
+
+              <span className="text-xs text-muted-foreground whitespace-nowrap">
+                Last updated:{" "}
+                <span className="font-medium text-foreground">
+                  {formatLastUpdated(lastUpdated)}
+                </span>
+              </span>
+            </div>
+          </div>
         </CardHeader>
 
         <CardContent className="space-y-3">
@@ -277,10 +348,7 @@ export function AdminFeedbackReports() {
                       </div>
                     ) : (
                       <div className="pt-3 flex justify-end">
-                        <Button
-                          className="rounded-xl"
-                          onClick={() => openResolveDialog(r)}
-                        >
+                        <Button className="rounded-xl" onClick={() => openResolveDialog(r)}>
                           <CheckCircle2 className="mr-2 h-4 w-4" />
                           Resolve
                         </Button>
@@ -305,9 +373,7 @@ export function AdminFeedbackReports() {
           </DialogHeader>
 
           <div className="space-y-2">
-            <p className="text-sm font-medium">
-              {selectedBug?.title}
-            </p>
+            <p className="text-sm font-medium">{selectedBug?.title}</p>
 
             <Textarea
               value={resolutionNotes}
