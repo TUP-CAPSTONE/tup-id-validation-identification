@@ -1,24 +1,24 @@
-"use client"
+"use client";
 
-import { useEffect, useMemo, useState } from "react"
-import { Button } from "@/components/ui/button"
+import { useEffect, useMemo, useState } from "react";
+import { Button } from "@/components/ui/button";
 import {
   Card,
   CardContent,
   CardHeader,
   CardTitle,
   CardDescription,
-} from "@/components/ui/card"
-import { Badge } from "@/components/ui/badge"
-import { Separator } from "@/components/ui/separator"
-import { Textarea } from "@/components/ui/textarea"
+} from "@/components/ui/card";
+import { Badge } from "@/components/ui/badge";
+import { Separator } from "@/components/ui/separator";
+import { Textarea } from "@/components/ui/textarea";
 import {
   Loader2,
   Bug,
   MessageSquareText,
   CheckCircle2,
   RefreshCw,
-} from "lucide-react"
+} from "lucide-react";
 
 import {
   Dialog,
@@ -27,130 +27,162 @@ import {
   DialogFooter,
   DialogHeader,
   DialogTitle,
-} from "@/components/ui/dialog"
+} from "@/components/ui/dialog";
 
-type ReportType = "feedback" | "bug"
+import { getAuth } from "firebase/auth";
+
+const auth = getAuth();
+
+type ReportType = "feedback" | "bug";
 
 type ReportItem = {
-  id: string
-  type: ReportType
-  senderRole: string
-  senderName: string
-  senderEmail: string
-  title: string
-  status: string
+  id: string;
+  type: ReportType;
+  senderRole: string;
+  senderName: string;
+  senderEmail: string;
+  title: string;
+  status: string;
+
+  createdAt: any; // New field for report creation
+  resolvedAt?: any;
 
   // feedback
-  rating?: number
-  category?: string
-  experience?: string
-  suggestions?: string
+  rating?: number;
+  category?: string;
+  experience?: string;
+  suggestions?: string;
 
   // bug
-  bugSeverity?: string
-  stepsToReproduce?: string
-  expectedBehavior?: string
-  actualBehavior?: string
-  deviceInfo?: string
+  bugSeverity?: string;
+  stepsToReproduce?: string;
+  expectedBehavior?: string;
+  actualBehavior?: string;
+  deviceInfo?: string;
 
   // resolution
-  resolvedAt?: any
-  resolutionNotes?: string
+  resolutionNotes?: string;
+  resolvedByName?: string;
+  resolvedByUid?: string;
+  resolvedByEmail?: string;
+};
+
+// Safe date formatter for Firestore timestamps, strings, or numbers
+function formatDate(d: any) {
+  if (!d) return "—";
+
+  // Firestore timestamp
+  if (typeof d === "object" && d.seconds !== undefined) {
+    d = new Date(d.seconds * 1000 + (d.nanoseconds || 0) / 1000000);
+  } else if (typeof d === "string" || typeof d === "number") {
+    d = new Date(d);
+  } else if (!(d instanceof Date)) {
+    return "—";
+  }
+
+  // now safe to get time
+  if (isNaN(d.valueOf())) return "—";
+
+  return d
+    .toLocaleString(undefined, {
+      month: "short",
+      day: "2-digit",
+      year: "numeric",
+      hour: "numeric",
+      minute: "2-digit",
+      hour12: true,
+    })
+    .replace(",", " •");
 }
 
-function formatLastUpdated(d: Date | null) {
-  if (!d) return "—"
-  // Example: Jan 29, 2026 • 3:14 PM
-  return d.toLocaleString(undefined, {
-    month: "short",
-    day: "2-digit",
-    year: "numeric",
-    hour: "numeric",
-    minute: "2-digit",
-  })
-}
+
 
 export function AdminFeedbackReports() {
-  const [tab, setTab] = useState<ReportType>("feedback")
-  const [loading, setLoading] = useState(true)
-  const [refreshing, setRefreshing] = useState(false)
-  const [reports, setReports] = useState<ReportItem[]>([])
-  const [lastUpdated, setLastUpdated] = useState<Date | null>(null)
+  const [tab, setTab] = useState<ReportType>("feedback");
+  const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
+  const [reports, setReports] = useState<ReportItem[]>([]);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
 
   // resolve dialog
-  const [resolveOpen, setResolveOpen] = useState(false)
-  const [selectedBug, setSelectedBug] = useState<ReportItem | null>(null)
-  const [resolutionNotes, setResolutionNotes] = useState("")
-  const [resolveLoading, setResolveLoading] = useState(false)
+  const [resolveOpen, setResolveOpen] = useState(false);
+  const [selectedBug, setSelectedBug] = useState<ReportItem | null>(null);
+  const [resolutionNotes, setResolutionNotes] = useState("");
+  const [resolveLoading, setResolveLoading] = useState(false);
 
   async function fetchReports(mode: "initial" | "refresh" = "initial") {
-    if (mode === "initial") setLoading(true)
-    if (mode === "refresh") setRefreshing(true)
+    if (mode === "initial") setLoading(true);
+    if (mode === "refresh") setRefreshing(true);
 
     try {
       const res = await fetch("/api/admin/feedback-reports", {
         method: "GET",
         cache: "no-store",
-      })
+      });
 
-      // in case endpoint is wrong, show the real response text
-      const text = await res.text()
-      let data: any = {}
+      const text = await res.text();
+      let data: any = {};
       try {
-        data = JSON.parse(text)
+        data = JSON.parse(text);
       } catch {
         throw new Error(
           "API did not return JSON. Check that /api/admin/feedback-reports exists."
-        )
+        );
       }
 
-      setReports(data?.reports ?? [])
-      setLastUpdated(new Date())
+      setReports(data?.reports ?? []);
+      setLastUpdated(new Date());
     } catch (err) {
-      console.error(err)
+      console.error(err);
     } finally {
-      if (mode === "initial") setLoading(false)
-      if (mode === "refresh") setRefreshing(false)
+      if (mode === "initial") setLoading(false);
+      if (mode === "refresh") setRefreshing(false);
     }
   }
 
   useEffect(() => {
-    fetchReports("initial")
-  }, [])
+    fetchReports("initial");
+  }, []);
 
   const filtered = useMemo(
     () => reports.filter((r) => r.type === tab),
     [reports, tab]
-  )
+  );
 
   const overallRating = useMemo(() => {
     const feedbacks = reports.filter(
       (r) => r.type === "feedback" && typeof r.rating === "number"
-    )
-    if (feedbacks.length === 0) return null
+    );
+    if (feedbacks.length === 0) return null;
     const avg =
-      feedbacks.reduce((acc, r) => acc + (r.rating || 0), 0) / feedbacks.length
-    return Number(avg.toFixed(2))
-  }, [reports])
+      feedbacks.reduce((acc, r) => acc + (r.rating || 0), 0) / feedbacks.length;
+    return Number(avg.toFixed(2));
+  }, [reports]);
 
   const gradeLabel = useMemo(() => {
-    if (overallRating === null) return "N/A"
-    if (overallRating >= 4.5) return "Excellent"
-    if (overallRating >= 3.5) return "Good"
-    if (overallRating >= 2.5) return "Fair"
-    return "Poor"
-  }, [overallRating])
+    if (overallRating === null) return "N/A";
+    if (overallRating >= 4.5) return "Excellent";
+    if (overallRating >= 3.5) return "Good";
+    if (overallRating >= 2.5) return "Fair";
+    return "Poor";
+  }, [overallRating]);
 
   function openResolveDialog(report: ReportItem) {
-    setSelectedBug(report)
-    setResolutionNotes(report.resolutionNotes || "")
-    setResolveOpen(true)
+    setSelectedBug(report);
+    setResolutionNotes(report.resolutionNotes || "");
+    setResolveOpen(true);
   }
 
   async function resolveBugReport() {
-    if (!selectedBug) return
+    if (!selectedBug) return;
 
-    setResolveLoading(true)
+    const user = auth.currentUser;
+    if (!user) {
+      alert("Admin not authenticated.");
+      return;
+    }
+
+    setResolveLoading(true);
     try {
       const res = await fetch("/api/admin/feedback-reports/resolved", {
         method: "PATCH",
@@ -158,28 +190,32 @@ export function AdminFeedbackReports() {
         body: JSON.stringify({
           id: selectedBug.id,
           resolutionNotes,
+          resolvedByName: user.displayName || "Admin",
+          resolvedByUid: user.uid,
+          resolvedByEmail: user.email || "",
         }),
-      })
+      });
 
-      const text = await res.text()
-      let data: any = {}
+      const text = await res.text();
+      let data: any = {};
       try {
-        data = JSON.parse(text)
+        data = JSON.parse(text);
       } catch {
-        throw new Error("Resolve API did not return JSON.")
+        throw new Error("Resolve API did not return JSON.");
       }
 
-      if (!res.ok) throw new Error(data?.error || "Failed to resolve bug report.")
+      if (!res.ok)
+        throw new Error(data?.error || "Failed to resolve bug report.");
 
-      setResolveOpen(false)
-      setSelectedBug(null)
-      setResolutionNotes("")
-      await fetchReports("refresh")
+      setResolveOpen(false);
+      setSelectedBug(null);
+      setResolutionNotes("");
+      await fetchReports("refresh");
     } catch (err) {
-      console.error(err)
-      alert((err as any)?.message || "Something went wrong.")
+      console.error(err);
+      alert((err as any)?.message || "Something went wrong.");
     } finally {
-      setResolveLoading(false)
+      setResolveLoading(false);
     }
   }
 
@@ -213,16 +249,22 @@ export function AdminFeedbackReports() {
         <Card className="rounded-2xl shadow-sm">
           <CardHeader className="pb-2">
             <CardTitle className="text-lg">Overall Feedback Grade</CardTitle>
-            <CardDescription>Average rating from feedback submissions</CardDescription>
+            <CardDescription>
+              Average rating from feedback submissions
+            </CardDescription>
           </CardHeader>
           <CardContent className="flex items-center justify-between">
             <div className="space-y-1">
               <p className="text-4xl font-bold">
                 {overallRating === null ? "--" : overallRating}
-                <span className="text-base font-medium text-muted-foreground"> / 5</span>
+                <span className="text-base font-medium text-muted-foreground">
+                  {" "}
+                  / 5
+                </span>
               </p>
               <p className="text-sm text-muted-foreground">
-                Grade: <span className="font-semibold text-foreground">{gradeLabel}</span>
+                Grade:{" "}
+                <span className="font-semibold text-foreground">{gradeLabel}</span>
               </p>
             </div>
 
@@ -233,7 +275,6 @@ export function AdminFeedbackReports() {
 
       {/* List */}
       <Card className="rounded-2xl shadow-sm">
-        {/* Header with reload + last updated */}
         <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
           <div>
             <CardTitle className="text-lg">
@@ -270,7 +311,7 @@ export function AdminFeedbackReports() {
               <span className="text-xs text-muted-foreground whitespace-nowrap">
                 Last updated:{" "}
                 <span className="font-medium text-foreground">
-                  {formatLastUpdated(lastUpdated)}
+                  {formatDate(lastUpdated)}
                 </span>
               </span>
             </div>
@@ -296,13 +337,15 @@ export function AdminFeedbackReports() {
                     <p className="text-xs text-muted-foreground">
                       {r.senderName} ({r.senderRole}) • {r.senderEmail}
                     </p>
+                    <p className="text-xs text-muted-foreground">
+                      Reported at: {formatDate(r.createdAt)}
+                    </p>
                   </div>
 
                   <div className="flex flex-wrap items-center gap-2">
                     <Badge variant="outline">
                       {r.type === "feedback" ? "Feedback" : "Bug Report"}
                     </Badge>
-                    <Badge className="capitalize">{r.status || "open"}</Badge>
                   </div>
                 </div>
 
@@ -319,11 +362,11 @@ export function AdminFeedbackReports() {
                     <p>
                       <span className="font-medium">Experience:</span> {r.experience ?? "—"}
                     </p>
-                    {r.suggestions ? (
+                    {r.suggestions && (
                       <p>
                         <span className="font-medium">Suggestions:</span> {r.suggestions}
                       </p>
-                    ) : null}
+                    )}
                   </div>
                 ) : (
                   <div className="space-y-2 text-sm">
@@ -342,13 +385,33 @@ export function AdminFeedbackReports() {
                     </p>
 
                     {r.status === "resolved" ? (
-                      <div className="pt-3 rounded-xl bg-muted p-3">
+                      <div className="pt-3 rounded-xl bg-muted p-3 space-y-2">
                         <p className="font-medium">Resolution Notes:</p>
-                        <p className="text-muted-foreground">{r.resolutionNotes || "—"}</p>
+
+                        <p className="text-sm">
+                          <span className="font-medium">Resolved by:</span>{" "}
+                          {r.resolvedByName || "Admin"}
+                          {r.resolvedByEmail ? ` (${r.resolvedByEmail})` : ""}
+                        </p>
+
+                        {r.resolvedAt && (
+                          <p className="text-xs text-muted-foreground">
+                            Resolved at: {formatDate(r.resolvedAt)}
+                          </p>
+                        )}
+
+                        <Separator />
+
+                        <p className="text-muted-foreground">
+                          {r.resolutionNotes || "—"}
+                        </p>
                       </div>
                     ) : (
                       <div className="pt-3 flex justify-end">
-                        <Button className="rounded-xl" onClick={() => openResolveDialog(r)}>
+                        <Button
+                          className="rounded-xl"
+                          onClick={() => openResolveDialog(r)}
+                        >
                           <CheckCircle2 className="mr-2 h-4 w-4" />
                           Resolve
                         </Button>
@@ -410,5 +473,5 @@ export function AdminFeedbackReports() {
         </DialogContent>
       </Dialog>
     </div>
-  )
+  );
 }
