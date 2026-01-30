@@ -144,7 +144,7 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
           </SidebarMenuItem>
 
           <SidebarMenuItem>
-            <Link href="/clients/admin/manage-feedbacks">
+            <Link href="/clients/admin/dashboard/manage-feedbacks">
               <SidebarMenuButton
                 className={cn(
                   "rounded-md transition-colors h-12",

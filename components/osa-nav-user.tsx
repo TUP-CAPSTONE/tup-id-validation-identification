@@ -64,7 +64,6 @@ export function NavUser() {
 
 
   const handleLogout = async () => {
-    await fetch("/api/osa/logout", { method: "POST" })
     await signOut(auth)
     router.replace("/clients/OSA/login")
   }

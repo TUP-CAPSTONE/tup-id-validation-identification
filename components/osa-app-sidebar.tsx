@@ -116,7 +116,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
           {/* Feedbacks */}
 
           <SidebarMenuItem>
-            <Link href="/clients/OSA/dashboard/feedbacks">
+            <Link href="/clients/OSA/dashboard/feedbacks-reports">
               <SidebarMenuButton
                 className={cn(
                   "rounded-md transition-colors h-12",
@@ -128,7 +128,7 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
               >
                 <MessageCircleMore className="w-5 h-5" />
 
-                <span className="font-medium text-base">Feedbacks</span>
+                <span className="font-medium text-base">Feedbacks & Bug Reports</span>
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>
