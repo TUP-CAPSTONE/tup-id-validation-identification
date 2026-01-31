@@ -93,6 +93,22 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
 
           {/* Account Management Section */}
           <SidebarMenuItem>
+            <Link href="/clients/admin/dashboard/manage-system-accounts">
+              <SidebarMenuButton
+                className={cn(
+                  "rounded-md transition-colors h-12",
+                  pathname.includes("manage-system-accounts") 
+                    ? "bg-blue-100 text-blue-900 hover:bg-blue-200" 
+                    : "text-gray-700 hover:bg-gray-100"
+                )}
+              >
+                <Building2 className="w-5 h-5" />
+                <span className="font-medium text-base">Manage System Accounts</span>
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem>
             <Link href="/clients/admin/dashboard/manage-osa-accounts">
               <SidebarMenuButton
                 className={cn(
@@ -158,6 +174,7 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>
+          
         </SidebarMenu>
       </SidebarContent>
       <SidebarRail />
