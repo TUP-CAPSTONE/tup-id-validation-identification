@@ -93,7 +93,12 @@ export function ReviewRegistrationDialog({
             <Detail label="Student Number" value={request.studentNumber} />
             <Detail label="Email" value={request.email} />
             <Detail label="Phone" value={request.phone || "—"} />
+            <Detail label="Guardian Email" value={request.guardianEmail || "—"} />
+            <Detail label="Guardian Phone" value={request.guardianPhone || "—"} />
             <Detail label="Birth Date" value={request.bday || "—"} />
+            
+            <Detail label="Remarks" value={request.remarks || "—"} full />
+            <Detail label="Reviewed By" value={request.reviewedBy || "—"} full />
             <Detail
               label="Requested At"
               value={
@@ -103,8 +108,7 @@ export function ReviewRegistrationDialog({
               }
               full
             />
-            <Detail label="Remarks" value={request.remarks || "—"} full />
-            <Detail label="Reviewed By" value={request.reviewedBy || "—"} full />
+            
           </div>
 
           {/* Actions */}

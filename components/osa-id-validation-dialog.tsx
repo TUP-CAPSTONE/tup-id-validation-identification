@@ -47,7 +47,7 @@ export function IdValidationDialog({ open, onClose, request, onUpdate }: Props) 
     const basePath = `validated-ids/${request.tupId}`
 
     // Upload COR (stored as 'cor' in Firestore)
-    const corData = request.corFile || request.cor
+    const corData = request.corFile 
     if (corData) {
       const corRef = ref(storage, `${basePath}/cor`)
       uploadPromises.push(uploadString(corRef, corData, 'data_url'))

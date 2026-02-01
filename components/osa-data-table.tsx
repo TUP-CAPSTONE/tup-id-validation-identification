@@ -90,9 +90,6 @@ export function DataTable<TData, TValue>({
             <SelectItem value="accepted" className="font-bold text-green-600">
               Accepted
             </SelectItem>
-            <SelectItem value="rejected" className="font-bold text-red-600">
-              Rejected
-            </SelectItem>
           </SelectContent>
         </Select>
       </div>

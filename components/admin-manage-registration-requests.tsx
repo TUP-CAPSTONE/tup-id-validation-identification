@@ -13,6 +13,8 @@ export interface RegistrationRequest {
   email: string
   phone: string
   bday?: string
+  guardianEmail: string
+  guardianPhone: string
   uid: string
   requestedAt: any
   status: "Pending" | "Accepted" | "Rejected"
@@ -52,6 +54,8 @@ export function ManageRegistrationRequests() {
           studentNumber: d.tup_id || d.studentNumber || doc.id,
           email: d.student_email || d.email || "",
           phone: d.student_phone_num || d.phone || "",
+          guardianEmail: d.guardian_email || d.guardianEmail || "",
+          guardianPhone: d.guardian_phone_number || d.guardianPhone || "",
           bday: d.bday || d.birthDate,
           uid: d.uid || "",
           requestedAt: d.createdAt || d.requestedAt,
