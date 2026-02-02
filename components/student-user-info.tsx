@@ -367,58 +367,6 @@ export default function StudentUserInfo() {
                 </div>
 
                 <div className="pt-4 border-t border-gray-200">
-                  <h3 className="text-sm font-bold text-[#b32032] mb-4 uppercase tracking-wide">Academic Information</h3>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-[#b32032] mb-2">Course</label>
-                      {editMode ? (
-                        <input
-                          type="text"
-                          value={editingData?.course || ''}
-                          onChange={(e) => updateUserField('course', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#b32032]"
-                        />
-                      ) : (
-                        <div className="px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-900">
-                          {profile.course || 'N/A'}
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-[#b32032] mb-2">Section</label>
-                      {editMode ? (
-                        <input
-                          type="text"
-                          value={editingData?.section || ''}
-                          onChange={(e) => updateUserField('section', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#b32032]"
-                        />
-                      ) : (
-                        <div className="px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-900">
-                          {profile.section || 'N/A'}
-                        </div>
-                      )}
-                    </div>
-                    <div>
-                      <label className="block text-xs font-semibold uppercase tracking-wide text-[#b32032] mb-2">Year Level</label>
-                      {editMode ? (
-                        <input
-                          type="text"
-                          value={editingData?.yearLevel || ''}
-                          onChange={(e) => updateUserField('yearLevel', e.target.value)}
-                          className="w-full px-3 py-2 border border-gray-300 rounded-md focus:outline-none focus:ring-2 focus:ring-[#b32032]"
-                        />
-                      ) : (
-                        <div className="px-3 py-2 border border-gray-200 rounded-md bg-gray-50 text-gray-900">
-                          {profile.yearLevel || 'N/A'}
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </div>
-
-                <div className="pt-4 border-t border-gray-200">
                   <h3 className="text-sm font-bold text-[#b32032] mb-4 uppercase tracking-wide">Guardian Information</h3>
                   
                   <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
