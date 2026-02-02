@@ -43,6 +43,9 @@ export default function ValidationPage() {
           tupId: docData.tupId,
           email: docData.email,
           phoneNumber: docData.phoneNumber,
+          course: docData.course || '',
+          section: docData.section || '',
+          yearLevel: docData.yearLevel || '',
           idPicture: docData.idPicture,
           corFile: docData.cor || docData.corFile,  // Use 'cor' first (student form field name)
           selfiePictures: docData.selfiePictures,

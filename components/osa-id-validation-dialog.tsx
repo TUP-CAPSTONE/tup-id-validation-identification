@@ -15,7 +15,7 @@ import { ImagePreviewDialog } from "./osa-image-preview-dialog"
 import { ValidationRequest } from "./osa-id-validation-table"
 import { db, storage } from "@/lib/firebaseConfig"
 import { doc, updateDoc, deleteDoc, serverTimestamp } from "firebase/firestore"
-import { ref, uploadString } from "firebase/storage"
+import { ref, getDownloadURL, uploadBytes, deleteObject, getBlob, getMetadata } from "firebase/storage"
 
 interface Props {
   open: boolean
@@ -40,42 +40,177 @@ export function IdValidationDialog({ open, onClose, request, onUpdate }: Props) 
   }
 
   /**
-   * Upload images to Firebase Storage
+   * Copy images from ID_Validation_Files to Validation_Success folder (same bucket)
    */
-  const uploadImagesToStorage = async () => {
-    const uploadPromises = []
-    const basePath = `validated-ids/${request.tupId}`
+  const copyImagesToValidatedFolder = async (): Promise<{
+    cor: string;
+    idPicture: string;
+    selfiePictures: {
+      front: string;
+      left: string;
+      back: string;
+    };
+  }> => {
+    console.log('Copying images from ID_Validation_Files to Validation_Success...');
+    console.log('Request data:', {
+      cor: request.corFile || request.cor,
+      idPicture: request.idPicture,
+      selfiePictures: request.selfiePictures
+    });
+    
+    // Validate all required fields exist
+    const corSourceUrl = request.corFile || request.cor;
+    if (!corSourceUrl) {
+      throw new Error('COR file URL is missing');
+    }
+    if (!request.idPicture) {
+      throw new Error('ID Picture URL is missing');
+    }
+    if (!request.selfiePictures?.front || !request.selfiePictures?.left || !request.selfiePictures?.back) {
+      throw new Error('One or more selfie pictures are missing');
+    }
+    
+    // Use same bucket, different folder
+    const basePath = `Validation_Success/${request.tupId}`;
+    
+    // Helper function to copy a file using Firebase Storage references
+    const copyFile = async (sourceUrl: string, destinationPath: string): Promise<string> => {
+      console.log(`\n[COPY] Starting copy: ${destinationPath}`);
+      console.log(`[COPY] Source URL: ${sourceUrl}`);
+      
+      // Validate URL
+      if (!sourceUrl || typeof sourceUrl !== 'string') {
+        console.error(`[COPY] Invalid source URL type: ${typeof sourceUrl}`);
+        throw new Error(`Invalid source URL: ${sourceUrl}`);
+      }
+      
+      // Check if it's a valid URL
+      if (!sourceUrl.startsWith('http://') && !sourceUrl.startsWith('https://')) {
+        console.error(`[COPY] Source URL is not HTTP(S): ${sourceUrl.substring(0, 100)}`);
+        throw new Error(`Source URL must be a valid HTTP/HTTPS URL. Got: ${sourceUrl.substring(0, 100)}`);
+      }
+      
+      try {
+        // Extract the storage path from the URL
+        const urlObj = new URL(sourceUrl);
+        const pathMatch = urlObj.pathname.match(/o\/(.+?)(\?|$)/);
+        
+        if (!pathMatch) {
+          console.error(`[COPY] Could not parse storage path from URL`);
+          throw new Error(`Could not extract storage path from URL: ${sourceUrl}`);
+        }
+        
+        const sourcePath = decodeURIComponent(pathMatch[1]);
+        console.log(`[COPY] Extracted source path: ${sourcePath}`);
+        console.log(`[COPY] Destination path: ${destinationPath}`);
+        
+        // Check if file is already in Validation_Success folder (already approved)
+        if (sourcePath.startsWith('Validation_Success/')) {
+          console.log(`[COPY] File already in Validation_Success, returning existing URL`);
+          return sourceUrl;
+        }
+        
+        // Both are in same bucket
+        const sourceRef = ref(storage, sourcePath);
+        
+        // Check if source file exists
+        console.log(`[COPY] Checking if source file exists...`);
+        try {
+          const metadata = await getMetadata(sourceRef);
+          console.log(`[COPY] Source file exists: ${metadata.size} bytes`);
+        } catch (err: any) {
+          if (err.code === 'storage/object-not-found') {
+            console.warn(`[COPY] Source file not found at: ${sourcePath}`);
+            console.warn(`[COPY] This is expected for old requests - returning original URL`);
+            return sourceUrl;
+          }
+          throw err;
+        }
+        
+        // Download the blob from source
+        console.log(`[COPY] Downloading blob from source...`);
+        const blob = await getBlob(sourceRef);
+        console.log(`[COPY] Downloaded: ${blob.size} bytes, type: ${blob.type}`);
+        
+        // Upload to destination in same bucket
+        console.log(`[COPY] Uploading to destination: ${destinationPath}`);
+        const destRef = ref(storage, destinationPath);
+        const uploadResult = await uploadBytes(destRef, blob);
+        console.log(`[COPY] Upload successful`);
+        
+        // Get the new download URL
+        const newUrl = await getDownloadURL(uploadResult.ref);
+        console.log(`[COPY] ✓ File copied successfully`);
+        console.log(`[COPY] New URL: ${newUrl}`);
+        return newUrl;
+      } catch (error: any) {
+        console.error(`[COPY] ✗ Error during copy:`, error);
+        console.error(`[COPY] Error code:`, error.code);
+        console.error(`[COPY] Error message:`, error.message);
+        throw new Error(`Failed to copy file to ${destinationPath}: ${error.message}`);
+      }
+    };
+    
+    // Copy all images to Validation_Success folder
+    const [corUrl, idPictureUrl, frontUrl, leftUrl, backUrl] = await Promise.all([
+      copyFile(corSourceUrl, `${basePath}/cor.pdf`),
+      copyFile(request.idPicture, `${basePath}/id-picture.jpg`),
+      copyFile(request.selfiePictures.front, `${basePath}/selfie-front.jpg`),
+      copyFile(request.selfiePictures.left, `${basePath}/selfie-left.jpg`),
+      copyFile(request.selfiePictures.back, `${basePath}/selfie-back.jpg`),
+    ]);
+    
+    console.log('✓ All images copied to Validation_Success folder');
+    
+    return {
+      cor: corUrl,
+      idPicture: idPictureUrl,
+      selfiePictures: {
+        front: frontUrl,
+        left: leftUrl,
+        back: backUrl,
+      },
+    };
+  };
 
-    // Upload COR (stored as 'cor' in Firestore)
-    const corData = request.corFile 
-    if (corData) {
-      const corRef = ref(storage, `${basePath}/cor`)
-      uploadPromises.push(uploadString(corRef, corData, 'data_url'))
+  /**
+   * Delete images from ID_Validation_Files folder
+   */
+  const deleteImagesFromOngoingFolder = async () => {
+    console.log('Deleting images from ID_Validation_Files...');
+    
+    try {
+      // Extract file paths from URLs and delete them
+      const deleteFile = async (url: string) => {
+        try {
+          // Extract path from Firebase Storage URL
+          const urlObj = new URL(url);
+          const pathMatch = urlObj.pathname.match(/o\/(.+?)(\?|$)/);
+          if (pathMatch) {
+            const filePath = decodeURIComponent(pathMatch[1]);
+            const fileRef = ref(storage, filePath);
+            await deleteObject(fileRef);
+            console.log(`  Deleted: ${filePath}`);
+          }
+        } catch (err) {
+          console.warn('Could not delete file:', url, err);
+        }
+      };
+      
+      await Promise.all([
+        deleteFile(request.corFile || request.cor),
+        deleteFile(request.idPicture),
+        deleteFile(request.selfiePictures.front),
+        deleteFile(request.selfiePictures.left),
+        deleteFile(request.selfiePictures.back),
+      ]);
+      
+      console.log('✓ Old images deleted from ID_Validation_Files');
+    } catch (error) {
+      console.error('Error deleting old images:', error);
+      // Don't throw - deletion failure shouldn't block approval
     }
-
-    // Upload ID Picture
-    if (request.idPicture) {
-      const idRef = ref(storage, `${basePath}/id-picture`)
-      uploadPromises.push(uploadString(idRef, request.idPicture, 'data_url'))
-    }
-
-    // Upload Selfies
-    const selfies = request.selfiePictures
-    if (selfies.front) {
-      const frontRef = ref(storage, `${basePath}/selfie-front`)
-      uploadPromises.push(uploadString(frontRef, selfies.front, 'data_url'))
-    }
-    if (selfies.left) {
-      const leftRef = ref(storage, `${basePath}/selfie-left`)
-      uploadPromises.push(uploadString(leftRef, selfies.left, 'data_url'))
-    }
-    if (selfies.back) {
-      const backRef = ref(storage, `${basePath}/selfie-back`)
-      uploadPromises.push(uploadString(backRef, selfies.back, 'data_url'))
-    }
-
-    await Promise.all(uploadPromises)
-  }
+  };
 
   /**
    * Approve the validation request
@@ -85,27 +220,33 @@ export function IdValidationDialog({ open, onClose, request, onUpdate }: Props) 
 
     setProcessing(true)
     try {
-      // Upload images to Firebase Storage
-      await uploadImagesToStorage()
-
-      // Update request status to accepted
-      const requestRef = doc(db, 'validation_requests2', request.id)
+      console.log('Starting approval process...');
+      console.log('Request ID:', request.id);
+      console.log('Request data:', request);
+      
+      // Simply update request status to accepted
+      // Keep the existing URLs (they're already in Firebase Storage)
+      const requestRef = doc(db, 'validation_requests2', request.id);
+      
+      console.log('Updating Firestore document...');
       await updateDoc(requestRef, {
         status: 'accepted',
         acceptedAt: serverTimestamp(),
-        rejectRemarks: null
-      })
+        rejectRemarks: null,
+      });
+      
+      console.log('✓ Request status updated to accepted');
 
-      alert('Request accepted successfully!')
-      onUpdate()
-      onClose()
+      alert('Request approved successfully!');
+      onUpdate();
+      onClose();
     } catch (error) {
-      console.error('Error approving request:', error)
-      alert('Failed to approve request')
+      console.error('Error approving request:', error);
+      alert('Failed to approve request: ' + (error as Error).message);
     } finally {
-      setProcessing(false)
+      setProcessing(false);
     }
-  }
+  };
 
   /**
    * Reject the validation request
@@ -200,6 +341,21 @@ export function IdValidationDialog({ open, onClose, request, onUpdate }: Props) 
               <p className="font-semibold">Status</p>
               <p className="uppercase">{request.status}</p>
             </div>
+
+            <div>
+              <p className="font-semibold">Course</p>
+              <p>{request.course || 'N/A'}</p>
+            </div>
+
+            <div>
+              <p className="font-semibold">Section</p>
+              <p>{request.section || 'N/A'}</p>
+            </div>
+
+            <div>
+              <p className="font-semibold">Year Level</p>
+              <p>{request.yearLevel || 'N/A'}</p>
+            </div>
           </div>
 
           <Separator />
@@ -245,7 +401,7 @@ export function IdValidationDialog({ open, onClose, request, onUpdate }: Props) 
               )}
 
               {/* SELFIES */}
-              {Object.entries(request.selfiePictures).map(([key, img]) => (
+              {request.selfiePictures && Object.entries(request.selfiePictures).map(([key, img]) => (
                 img && (
                   <div key={key} className="space-y-1 text-center">
                     <p className="text-xs capitalize">{key} selfie</p>

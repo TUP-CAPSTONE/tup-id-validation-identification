@@ -17,6 +17,9 @@ export type ValidationRequest = {
   tupId: string
   email: string
   phoneNumber: string
+  course: string
+  section: string
+  yearLevel: string
   idPicture: string
   selfiePictures: {
     front: string

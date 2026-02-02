@@ -111,7 +111,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
           </SidebarMenuItem>
 
           <SidebarMenuItem>
-            <Link href="/clients/students/dashboard/feedback">
+            <Link href="/clients/students/dashboard/feedback-reports">
               <SidebarMenuButton>
                 <SendIcon />
                 Give Feedback

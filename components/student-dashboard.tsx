@@ -262,89 +262,15 @@ export default function StudentDashboard() {
       </div>
 
       <Card className="border-[#e9b3bd] shadow-md">
-        <CardHeader
-          className="cursor-pointer bg-gradient-to-br from-[#fdf1f3] to-white hover:from-[#f8dfe4] hover:to-white transition-all"
-          onClick={() => toggleSection("feedback")}
-        >
-          <div className="flex items-center justify-between">
+        <CardHeader className="bg-gradient-to-br from-[#fdf1f3] to-white hover:from-[#f8dfe4] hover:to-white transition-all">
+          <div className="flex items-center justify-between cursor-pointer" onClick={() => router.push('/clients/students/dashboard/feedback-reports')}>
             <div>
               <CardTitle className="text-xl text-[#b32032]">Give Feedback</CardTitle>
               <CardDescription className="mt-1">Share your experience and suggestions</CardDescription>
             </div>
-            <div className="bg-white rounded-full p-2 shadow-sm">
-              {expandedSections["feedback"] ? (
-                <ChevronUp className="w-5 h-5 text-[#b32032]" />
-              ) : (
-                <ChevronDown className="w-5 h-5 text-[#b32032]" />
-              )}
-            </div>
+            <ArrowRight className="w-6 h-6 text-[#b32032]" />
           </div>
         </CardHeader>
-        {expandedSections["feedback"] && (
-          <CardContent className="pt-6">
-            <div className="space-y-6">
-              <p className="text-sm text-gray-700 leading-relaxed">
-                Help us improve our services by providing your feedback. Your input is valuable to us and helps enhance the student experience.
-              </p>
-
-              <div className="bg-gray-50 rounded-lg p-5">
-                <label className="block text-sm font-semibold text-gray-900 mb-4">
-                  How would you rate your experience?
-                </label>
-                <div className="flex gap-3 justify-center md:justify-start">
-                  {[1, 2, 3, 4, 5].map((star) => (
-                    <button
-                      key={star}
-                      className="text-4xl hover:scale-125 transition-transform duration-200 focus:outline-none focus:scale-125"
-                    >
-                      ⭐
-                    </button>
-                  ))}
-                </div>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-3">
-                  Your Feedback
-                </label>
-                <textarea
-                  placeholder="Write your feedback here... (minimum 10 characters)"
-                  className="w-full p-4 border-2 border-gray-200 rounded-lg focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent resize-none transition-all"
-                  rows={5}
-                />
-                <p className="text-xs text-gray-500 mt-2">
-                  💡 Please be specific and constructive in your feedback.
-                </p>
-              </div>
-
-              <div>
-                <label className="block text-sm font-semibold text-gray-900 mb-3">
-                  Feedback Type
-                </label>
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {["Suggestion", "Bug Report", "Complaint", "Compliment"].map((type) => (
-                    <label
-                      key={type}
-                      className="flex items-center gap-3 cursor-pointer bg-white border-2 border-gray-200 rounded-lg px-4 py-3 hover:border-[#b32032] hover:bg-[#fdf1f3] transition-all"
-                    >
-                      <input
-                        type="radio"
-                        name="feedbackType"
-                        value={type}
-                        className="w-4 h-4 text-[#b32032] focus:ring-[#b32032]"
-                      />
-                      <span className="text-sm font-medium text-gray-700">{type}</span>
-                    </label>
-                  ))}
-                </div>
-              </div>
-
-              <Button className="bg-[#b32032] hover:bg-[#8b1828] text-white w-full py-6 text-base font-semibold shadow-lg hover:shadow-xl transition-all">
-                Submit Feedback
-              </Button>
-            </div>
-          </CardContent>
-        )}
       </Card>
     </div>
   );

@@ -14,6 +14,7 @@ export default function StudentUserProfile() {
     firstName: "",
     lastName: "",
     email: "",
+    guardianEmail: "",
     studentId: "",
     phone: "",
     status: "",
@@ -53,6 +54,7 @@ export default function StudentUserProfile() {
           firstName: data.firstName || "",
           lastName: data.lastName || "",
           email: data.email || "",
+          guardianEmail: data.guardianEmail || data.guardian_email || "",
           studentId: data.studentId || "",
           phone: data.phone || "",
           status: data.status || "",
@@ -94,7 +96,6 @@ export default function StudentUserProfile() {
       await updateDoc(userDocRef, {
         firstName: userProfile.firstName,
         lastName: userProfile.lastName,
-        email: userProfile.email,
         studentId: userProfile.studentId,
         phone: userProfile.phone,
       });
@@ -139,13 +140,23 @@ export default function StudentUserProfile() {
               />
             </div>
             <div className="grid gap-2">
-              <Label htmlFor="email">Email</Label>
+              <Label htmlFor="email">Email (Cannot be changed)</Label>
               <Input
                 id="email"
                 type="email"
                 value={userProfile.email}
-                onChange={(e) => updateUserField('email', e.target.value)}
-                disabled={!editMode}
+                disabled
+                className="bg-gray-100"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="guardianEmail">Guardian Email (Cannot be changed)</Label>
+              <Input
+                id="guardianEmail"
+                type="email"
+                value={userProfile.guardianEmail}
+                disabled
+                className="bg-gray-100"
               />
             </div>
             <div className="grid gap-2">

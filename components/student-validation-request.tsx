@@ -8,6 +8,7 @@ import WebcamCapture from '@/components/webcam-capture';
 import { auth, db } from "@/lib/firebaseConfig";
 import { collection, addDoc, setDoc, serverTimestamp, query, where, getDocs, doc, getDoc } from "firebase/firestore";
 import { onAuthStateChanged } from "firebase/auth";
+import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { ArrowLeft } from "lucide-react";
 
 export default function StudentValidationRequest() {
@@ -23,6 +24,10 @@ export default function StudentValidationRequest() {
   const [faceFront, setFaceFront] = useState<string | null>(null);
   const [faceLeft, setFaceLeft] = useState<string | null>(null);
   const [faceRight, setFaceRight] = useState<string | null>(null);
+  
+  const [course, setCourse] = useState<string>('');
+  const [section, setSection] = useState<string>('');
+  const [yearLevel, setYearLevel] = useState<string>('');
   
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -86,9 +91,9 @@ export default function StudentValidationRequest() {
   }, []);
 
   /**
-   * Handle COR file upload
+   * Handle COR file upload to Firebase Storage
    */
-  const handleCorUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+  const handleCorUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
@@ -97,19 +102,130 @@ export default function StudentValidationRequest() {
       return;
     }
 
-    const reader = new FileReader();
-    reader.onload = () => {
-      setCorFile(reader.result as string);
+    try {
       setError(null);
-    };
-    reader.onerror = () => {
-      setError('Failed to read file');
-    };
-    reader.readAsDataURL(file);
+      const storage = getStorage();
+      const studentNumber = studentProfile?.studentNumber || studentProfile?.tup_id || 'unknown';
+      const fileName = `${studentNumber}_cor_${Date.now()}`;
+      const storageRef = ref(storage, `ID_Validation_Files/${studentNumber}/${fileName}`);
+      
+      await uploadBytes(storageRef, file);
+      const url = await getDownloadURL(storageRef);
+      setCorFile(url);
+    } catch (err: any) {
+      console.error('Error uploading COR:', err);
+      setError('Failed to upload COR file');
+    }
   };
 
   /**
-   * Submit validation request to Firestore
+   * Convert base64 string to Blob
+   */
+  const base64ToBlob = (base64: string): Blob => {
+    try {
+      console.log('base64ToBlob input length:', base64.length);
+      console.log('base64ToBlob first 100 chars:', base64.substring(0, 100));
+      
+      const parts = base64.split(';base64,');
+      console.log('Parts after split:', parts.length);
+      console.log('Part[0] (header):', parts[0]);
+      console.log('Part[1] length:', parts[1] ? parts[1].length : 'undefined');
+      
+      const contentType = parts[0].split(':')[1];
+      console.log('Extracted contentType:', contentType);
+      
+      const raw = window.atob(parts[1]);
+      console.log('Decoded raw length:', raw.length);
+      
+      const rawLength = raw.length;
+      const uInt8Array = new Uint8Array(rawLength);
+
+      for (let i = 0; i < rawLength; ++i) {
+        uInt8Array[i] = raw.charCodeAt(i);
+      }
+
+      const blob = new Blob([uInt8Array], { type: contentType });
+      console.log('Blob created successfully:', blob.size, 'bytes,', blob.type);
+      return blob;
+    } catch (error: any) {
+      console.error('Error in base64ToBlob:', error);
+      throw new Error(`base64ToBlob failed: ${error.message}`);
+    }
+  };
+
+  /**
+   * Upload base64 image to Firebase Storage
+   */
+  const uploadImageToStorage = async (base64Image: string, imageName: string): Promise<string> => {
+    // Ensure we have a string
+    if (!base64Image || typeof base64Image !== 'string') {
+      throw new Error(`${imageName} is not a valid string. Received: ${typeof base64Image}`);
+    }
+
+    // Trim any whitespace
+    let trimmedImage = base64Image.trim();
+
+    console.log(`[${imageName}] Initial validation:`);
+    console.log(`  - Length: ${trimmedImage.length} chars`);
+    console.log(`  - First 100 chars: ${trimmedImage.substring(0, 100)}`);
+
+    // Check if it's already a URL (in case of resubmission)
+    if (trimmedImage.startsWith('http://') || trimmedImage.startsWith('https://')) {
+      console.log(`[${imageName}] Already a Firebase Storage URL, returning as-is`);
+      return trimmedImage;
+    }
+
+    // Validate format: must be data:image/[type];base64,[data]
+    if (!trimmedImage.startsWith('data:')) {
+      console.error(`[${imageName}] ERROR: Does not start with 'data:'`);
+      throw new Error(`Invalid image format for ${imageName}. Must start with 'data:image/...'`);
+    }
+
+    // Check if format includes ;base64,
+    if (!trimmedImage.includes(';base64,')) {
+      console.error(`[${imageName}] ERROR: Missing ';base64,' separator`);
+      console.error(`  Current format: ${trimmedImage.substring(0, 150)}`);
+      throw new Error(`Invalid image format for ${imageName}. Must include ';base64,' separator`);
+    }
+
+    // Validate data part is not empty
+    const parts = trimmedImage.split(';base64,');
+    const datapart = parts[1];
+    if (!datapart || datapart.length === 0) {
+      console.error(`[${imageName}] ERROR: Base64 data is empty after ';base64,' separator`);
+      throw new Error(`Invalid image format for ${imageName}. Base64 data is empty`);
+    }
+
+    console.log(`[${imageName}] Format validation passed`);
+    console.log(`  - MIME type: ${parts[0].substring(5)}`);
+    console.log(`  - Data length: ${datapart.length} chars`);
+
+    try {
+      const storage = getStorage();
+      const studentNumber = studentProfile?.studentNumber || studentProfile?.tup_id || 'unknown';
+      const fileName = `${studentNumber}_${imageName}_${Date.now()}.jpg`;
+      const storageRef = ref(storage, `ID_Validation_Files/${studentNumber}/${fileName}`);
+
+      // Convert base64 to Blob and upload
+      console.log(`[${imageName}] Converting base64 to Blob...`);
+      const blob = base64ToBlob(trimmedImage);
+      console.log(`[${imageName}] Blob created: ${blob.size} bytes, type: ${blob.type}`);
+      
+      console.log(`[${imageName}] Uploading to Firebase Storage...`);
+      const snapshot = await uploadBytes(storageRef, blob);
+      const url = await getDownloadURL(snapshot.ref);
+      console.log(`✓ [${imageName}] Successfully uploaded to: ${url}`);
+      return url;
+    } catch (uploadError: any) {
+      console.error(`✗ [${imageName}] Upload failed:`, uploadError);
+      console.error(`  Error code: ${uploadError.code}`);
+      console.error(`  Error message: ${uploadError.message}`);
+      throw new Error(`Failed to upload ${imageName}: ${uploadError.message}`);
+    }
+  };
+
+  /**
+   * Submit validation request to Firestore with Firebase Storage URLs
    */
   const handleSubmit = async () => {
     if (!currentUser) {
@@ -119,6 +235,11 @@ export default function StudentValidationRequest() {
 
     if (!corFile || !idPhoto || !faceFront || !faceLeft || !faceRight) {
       setError('Please complete all required fields and captures');
+      return;
+    }
+
+    if (!course.trim() || !section.trim() || !yearLevel.trim()) {
+      setError('Please fill in course, section, and year level');
       return;
     }
 
@@ -132,30 +253,44 @@ export default function StudentValidationRequest() {
         `${studentProfile?.firstName || ''} ${studentProfile?.lastName || ''}`.trim() ||
         'Unknown'
 
+      const studentNumber =
+        studentProfile?.studentNumber ||
+        studentProfile?.tup_id ||
+        studentProfile?.studentId ||
+        'unknown';
+
+      // Upload all images to Firebase Storage
+      console.log('Uploading images to Firebase Storage...');
+      const [idPictureUrl, faceFrontUrl, faceLeftUrl, faceRightUrl] = await Promise.all([
+        uploadImageToStorage(idPhoto, 'id_picture'),
+        uploadImageToStorage(faceFront, 'pose_front'),
+        uploadImageToStorage(faceLeft, 'pose_left'),
+        uploadImageToStorage(faceRight, 'pose_right'),
+      ]);
+
       const requestData = {
         studentId: currentUser.uid,
-        tupId:
-          studentProfile?.studentNumber ||
-          studentProfile?.tup_id ||
-          studentProfile?.studentId ||
-          'N/A',
+        tupId: studentNumber,
         studentName: fullName,
         email: currentUser.email,
         phoneNumber: studentProfile?.phone || studentProfile?.student_phone_num || '',
+        course: course.trim(),
+        section: section.trim(),
+        yearLevel: yearLevel.trim(),
         
-        // Store base64 strings directly
+        // Store Firebase Storage URLs instead of base64
         cor: corFile,
-        idPicture: idPhoto,
+        idPicture: idPictureUrl,
         
         selfiePictures: {
-          front: faceFront,
-          left: faceLeft,
-          back: faceRight
+          front: faceFrontUrl,
+          left: faceLeftUrl,
+          back: faceRightUrl
         },
         
         status: 'pending',
         requestTime: serverTimestamp(),
-        rejectRemarks: null  // Clear any previous rejection remarks
+        rejectRemarks: null
       };
 
       // If there's an existing accepted request, prevent resubmission
@@ -165,13 +300,15 @@ export default function StudentValidationRequest() {
         return;
       }
 
-      // If there's an existing rejected request, update it (or recreate if missing)
+      // Use studentNumber as document ID instead of random UID
+      const requestDocRef = doc(db, 'validation_requests2', studentNumber);
+      
       if (existingRequest && existingRequest.status === 'rejected') {
-        const requestDocRef = doc(db, 'validation_requests2', existingRequest.id);
+        // Update existing rejected request
         await setDoc(requestDocRef, requestData, { merge: true });
       } else {
-        // Create new document
-        await addDoc(collection(db, 'validation_requests2'), requestData);
+        // Create new document with studentNumber as ID
+        await setDoc(requestDocRef, requestData);
       }
 
       setSuccess(true);
@@ -182,6 +319,9 @@ export default function StudentValidationRequest() {
       setFaceFront(null);
       setFaceLeft(null);
       setFaceRight(null);
+      setCourse('');
+      setSection('');
+      setYearLevel('');
       setShowResubmitForm(false);
 
     } catch (err: any) {
@@ -278,8 +418,11 @@ export default function StudentValidationRequest() {
           {/* Show message if accepted - no action button */}
           {existingRequest.status === 'accepted' && (
             <CardContent>
-              <p className="text-green-700">
-                Your ID validation has been accepted. You can proceed with your application.
+              <p className="text-green-700 font-semibold">
+                ✓ Your ID validation has been accepted. You cannot submit another request.
+              </p>
+              <p className="text-green-600 mt-2">
+                You can proceed with your application.
               </p>
             </CardContent>
           )}
@@ -311,7 +454,7 @@ export default function StudentValidationRequest() {
     );
   }
 
-  const allCaptured = corFile && idPhoto && faceFront && faceLeft && faceRight;
+  const allCaptured = corFile && idPhoto && faceFront && faceLeft && faceRight && course.trim() && section.trim() && yearLevel.trim();
 
   return (
     <div className="w-full max-w-6xl space-y-6">
@@ -332,6 +475,84 @@ export default function StudentValidationRequest() {
           </CardContent>
         </Card>
       )}
+
+      {/* Student Information Card */}
+      <Card className="border-red-200">
+        <CardHeader className="bg-red-50">
+          <CardTitle className="text-red-700">Student Information</CardTitle>
+          <CardDescription>Your name, email, and guardian email are automatically filled and cannot be changed. Please fill in your course, section, and year level</CardDescription>
+        </CardHeader>
+        <CardContent className="pt-6 space-y-4">
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Full Name (Auto-filled)</label>
+            <input
+              type="text"
+              value={studentProfile?.fullName || studentProfile?.name || `${studentProfile?.firstName || ''} ${studentProfile?.lastName || ''}`.trim() || 'Loading...'}
+              disabled
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Email (Auto-filled)</label>
+            <input
+              type="email"
+              value={currentUser?.email || ''}
+              disabled
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
+            />
+          </div>
+
+          <div>
+            <label className="block text-sm font-medium text-gray-700 mb-2">Guardian Email (Auto-filled)</label>
+            <input
+              type="email"
+              value={studentProfile?.guardianEmail || studentProfile?.guardian_email || 'Not provided'}
+              disabled
+              className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
+            />
+          </div>
+
+          <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Course *</label>
+              <input
+                type="text"
+                value={course}
+                onChange={(e) => setCourse(e.target.value)}
+                placeholder="e.g., BS Computer Science"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Section *</label>
+              <input
+                type="text"
+                value={section}
+                onChange={(e) => setSection(e.target.value)}
+                placeholder="e.g., A"
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
+              />
+            </div>
+
+            <div>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Year Level *</label>
+              <select
+                value={yearLevel}
+                onChange={(e) => setYearLevel(e.target.value)}
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
+              >
+                <option value="">Select Year Level</option>
+                <option value="1st Year">1st Year</option>
+                <option value="2nd Year">2nd Year</option>
+                <option value="3rd Year">3rd Year</option>
+                <option value="4th Year">4th Year</option>
+              </select>
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       {/* COR Upload Card */}
       <Card className="border-red-200">
