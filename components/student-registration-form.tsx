@@ -403,7 +403,7 @@ export function StudentRegistrationForm({
     <div className={cn("w-full bg-white", className)} {...props}>
       <div className="bg-white rounded-lg border border-red-100 shadow-md overflow-hidden">
         {/* Form Header Section */}
-        <div className="bg-gradient-to-r from-red-50 to-red-25 border-b border-red-100 px-6 md:px-8 py-6">
+        <div className="bg-linear-to-r from-red-50 to-red-25 border-b border-red-100 px-6 md:px-8 py-6">
           <div className="flex justify-between items-start gap-4">
             <div>
               <h2 className="text-2xl md:text-3xl font-bold text-[#b32032] tracking-tight mb-2">Create Your Account</h2>
