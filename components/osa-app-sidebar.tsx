@@ -10,6 +10,7 @@ import {
   LayoutDashboard,
   IdCardIcon,
   Users2Icon,
+  ScanQrCodeIcon,
   MessageCircleMore,
 } from "lucide-react";
 
@@ -88,6 +89,28 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
 
                 <span className="font-medium text-base">
                   Validation Requests
+                </span>
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+
+          {/* QR Code Scanning */}
+
+          <SidebarMenuItem>
+            <Link href="/clients/OSA/dashboard/scan-validation">
+              <SidebarMenuButton
+                className={cn(
+                  "rounded-md transition-colors h-12",
+
+                  pathname.includes("scan-validation")
+                    ? "bg-blue-100 text-blue-900 hover:bg-blue-200"
+                    : "text-gray-700 hover:bg-gray-100",
+                )}
+              >
+                <ScanQrCodeIcon className="w-5 h-5" />
+
+                <span className="font-medium text-base">
+                  QR Code Scanning
                 </span>
               </SidebarMenuButton>
             </Link>
