@@ -36,15 +36,25 @@ export async function POST(req: Request) {
 
     console.log("User data:", userData)
     console.log("User role:", userData?.role)
-    console.log("Role check result:", userData?.role !== "OSA")
 
     /**
-     * 3️⃣ Check OSA role
+     * 3️⃣ Check OSA role (case-insensitive)
      */
-    if (userData?.role !== "OSA") {
+    const userRole = userData?.role?.toUpperCase()
+    
+    if (userRole !== "OSA") {
       console.error(`OSA privilege check failed. Expected 'OSA', got '${userData?.role}'`)
+      
+      // Provide detailed error message
+      let errorMessage = "Not authorized as OSA"
+      if (!userData?.role) {
+        errorMessage = "Account does not have OSA privileges. Role field is missing."
+      } else {
+        errorMessage = `Not authorized as OSA. Your account role is: ${userData.role}`
+      }
+      
       return NextResponse.json(
-        { error: "Not authorized as OSA" },
+        { error: errorMessage },
         { status: 403 }
       )
     }

@@ -11,6 +11,7 @@ import {
   IdCardIcon,
   Users2Icon,
   MessageCircleMore,
+  FileWarning,
 } from "lucide-react";
 
 import { DatePicker } from "@/components/date-picker";
@@ -109,6 +110,26 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 <Users2Icon className="w-5 h-5" />
 
                 <span className="font-medium text-base">Students List</span>
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+
+          {/* File Offense */}
+
+          <SidebarMenuItem>
+            <Link href="/clients/OSA/dashboard/file-offense">
+              <SidebarMenuButton
+                className={cn(
+                  "rounded-md transition-colors h-12",
+
+                  pathname.includes("file-offense")
+                    ? "bg-blue-100 text-blue-900 hover:bg-blue-200"
+                    : "text-gray-700 hover:bg-gray-100",
+                )}
+              >
+                <FileWarning className="w-5 h-5" />
+
+                <span className="font-medium text-base">File Offense</span>
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>
