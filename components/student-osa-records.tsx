@@ -9,12 +9,14 @@ import { db, auth } from "@/lib/firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, getDocs, query, where } from "firebase/firestore";
 import { ArrowLeft } from "lucide-react";
+import { StudentHandbookDialog } from "@/components/student-handbook-dialog";
 
 export default function StudentOSARecords() {
   const router = useRouter();
   const [offenses, setOffenses] = useState<Array<any>>([]);
   const [loading, setLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [handbookDialogOpen, setHandbookDialogOpen] = useState<boolean>(false);
 
   /**
    * Go back to main dashboard
@@ -118,7 +120,13 @@ export default function StudentOSARecords() {
                       </div>
                     </div>
                     <div className="text-xs text-gray-600 italic">
-                      Reference: TUP Student Handbook - Rules on Conduct & Discipline
+                      Reference:{" "}
+                      <button
+                        onClick={() => setHandbookDialogOpen(true)}
+                        className="text-red-600 hover:text-red-800 underline hover:no-underline font-semibold transition-colors"
+                      >
+                        TUP Student Handbook - Rules on Conduct & Discipline
+                      </button>
                     </div>
                   </div>
 
@@ -213,6 +221,12 @@ export default function StudentOSARecords() {
           )}
         </CardContent>
       </Card>
+
+      {/* Student Handbook Dialog */}
+      <StudentHandbookDialog
+        open={handbookDialogOpen}
+        onOpenChange={setHandbookDialogOpen}
+      />
     </div>
   );
 }
