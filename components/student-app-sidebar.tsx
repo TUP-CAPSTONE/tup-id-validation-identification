@@ -13,6 +13,7 @@ import {
   SendIcon,
   PanelLeftClose,
   Paperclip,
+  FileTextIcon,
 } from "lucide-react"
 
 import { DatePicker } from "@/components/date-picker";
@@ -106,6 +107,15 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
               <SidebarMenuButton>
                 <UserIcon />
                 User Information
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+
+          <SidebarMenuItem>
+            <Link href="/clients/students/dashboard/osa-records">
+              <SidebarMenuButton>
+                <FileTextIcon />
+                OSA Records
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>

@@ -23,11 +23,6 @@ export default function StudentUserInfo() {
   const [editingData, setEditingData] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
 
-  // OSA / Offenses
-  const [offenses, setOffenses] = useState<Array<any>>([]);
-  const [offensesLoading, setOffensesLoading] = useState<boolean>(false);
-  const [offensesError, setOffensesError] = useState<string | null>(null);
-
   // Avatar upload state
   const [uploadingAvatar, setUploadingAvatar] = useState<boolean>(false);
   const [avatarError, setAvatarError] = useState<string | null>(null);
@@ -79,45 +74,11 @@ export default function StudentUserInfo() {
       } catch (err) {
         console.warn('Failed to load validation schedule', err);
       }
-
-      // Fetch OSA offenses
-      await fetchOffenses(uid);
     } catch (err: any) {
       console.error(err);
       setError("Failed to load profile");
     } finally {
       setLoading(false);
-    }
-  }
-
-  /**
-   * Fetches OSA offenses from Firestore
-   */
-  async function fetchOffenses(uid: string) {
-    try {
-      setOffensesLoading(true);
-      setOffensesError(null);
-
-      // Try subcollection first
-      const subCol = collection(db, 'students', uid, 'offenses');
-      const subSnap = await getDocs(subCol);
-      if (!subSnap.empty) {
-        const list: any[] = [];
-        subSnap.forEach((d) => list.push({ id: d.id, ...(d.data() as any) }));
-        setOffenses(list.sort((a, b) => (b.date ? new Date(b.date).getTime() : 0) - (a.date ? new Date(a.date).getTime() : 0)));
-      } else {
-        // Fallback to collection query
-        const q = query(collection(db, 'student_offenses'), where('uid', '==', uid));
-        const qSnap = await getDocs(q);
-        const list: any[] = [];
-        qSnap.forEach((d) => list.push({ id: d.id, ...(d.data() as any) }));
-        setOffenses(list.sort((a, b) => (b.date ? new Date(b.date).getTime() : 0) - (a.date ? new Date(a.date).getTime() : 0)));
-      }
-    } catch (err: any) {
-      console.warn('Could not load offenses', err);
-      setOffensesError('Failed to load OSA records');
-    } finally {
-      setOffensesLoading(false);
     }
   }
 
@@ -465,52 +426,6 @@ export default function StudentUserInfo() {
             </div>
           ) : (
             <div className="text-sm text-gray-600">No upcoming validation scheduled.</div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="mt-6 border-red-200 p-4 md:p-6">
-        <CardHeader className="bg-red-50 -mx-4 -mt-4 p-4 md:-mx-6 md:-mt-6 md:p-6 rounded-t-md">
-          <CardTitle className="text-red-700">OSA Records</CardTitle>
-          <CardDescription>Records from the Office of Student Affairs (disciplinary)</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {offensesLoading ? (
-            <p className="text-sm text-gray-600">Loading records...</p>
-          ) : offensesError ? (
-            <p className="text-sm text-red-600">{offensesError}</p>
-          ) : offenses.length === 0 ? (
-            <div className="text-sm text-green-700">No OSA records found.</div>
-          ) : (
-            <div className="space-y-3">
-              {offenses.map((o) => (
-                <div key={o.id} className="border rounded p-3 bg-white">
-                  <div className="flex items-start justify-between">
-                    <div>
-                      <div className="flex items-center gap-3">
-                        <div className={`px-2 py-1 rounded text-xs font-semibold ${o.severity === 'Major' ? 'bg-red-600 text-white' : 'bg-amber-200 text-amber-800'}`}>{o.severity || 'Minor'}</div>
-                        <div className="font-semibold text-sm text-gray-800">{o.title || 'Offense'}</div>
-                      </div>
-                      <div className="text-xs text-gray-600 mt-1">{o.date ? new Date(o.date).toLocaleString() : 'No date'}</div>
-                    </div>
-                    <div className="text-sm text-right">
-                      <div className={`px-2 py-1 rounded text-xs font-semibold ${o.status === 'Open' ? 'bg-red-100 text-red-700' : 'bg-green-100 text-green-700'}`}>{o.status || 'Open'}</div>
-                    </div>
-                  </div>
-                  {o.description && <div className="mt-2 text-sm text-gray-700">{o.description}</div>}
-                  {o.attachments && Array.isArray(o.attachments) && o.attachments.length > 0 && (
-                    <div className="mt-2">
-                      <p className="text-xs font-semibold mb-1">Attachments</p>
-                      <div className="flex gap-2 flex-wrap">
-                        {o.attachments.map((a: any, idx: number) => (
-                          <a key={idx} href={a.url || a} target="_blank" rel="noreferrer" className="text-sm text-red-600 underline">View {a.name || 'file'}</a>
-                        ))}
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-            </div>
           )}
         </CardContent>
       </Card>
