@@ -8,7 +8,7 @@ import {
   BreadcrumbList,
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb";
-import StudentOSARecords from "@/components/student-osa-records";
+import StudentMyOffenses from "@/components/student-my-offenses";
 
 export default function OSARecordsPage() {
   return (
@@ -20,7 +20,7 @@ export default function OSARecordsPage() {
             <BreadcrumbList>
               <BreadcrumbItem>
                 <BreadcrumbPage className="text-3xl md:text-4xl font-bold tracking-tight text-white drop-shadow-sm">
-                  OSA Records
+                  My Offenses
                 </BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
@@ -28,7 +28,7 @@ export default function OSARecordsPage() {
         </header>
 
         <div className="flex flex-1 gap-6 p-4">
-          <StudentOSARecords />
+          <StudentMyOffenses />
         </div>
       </SidebarInset>
     </SidebarProvider>

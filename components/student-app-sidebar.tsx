@@ -115,7 +115,7 @@ export function AppSidebar({ ...props }: React.ComponentProps<typeof Sidebar>) {
             <Link href="/clients/students/dashboard/osa-records">
               <SidebarMenuButton>
                 <FileTextIcon />
-                OSA Records
+                My Offenses
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>

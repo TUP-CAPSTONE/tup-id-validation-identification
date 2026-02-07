@@ -11,7 +11,7 @@ import { collection, getDocs, query, where } from "firebase/firestore";
 import { ArrowLeft } from "lucide-react";
 import { StudentHandbookDialog } from "@/components/student-handbook-dialog";
 
-export default function StudentOSARecords() {
+export default function StudentMyOffenses() {
   const router = useRouter();
   const [offenses, setOffenses] = useState<Array<any>>([]);
   const [loading, setLoading] = useState<boolean>(true);

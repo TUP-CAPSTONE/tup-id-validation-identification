@@ -1,6 +1,6 @@
 "use client";
 
-import { useState } from "react";
+import { useState, useRef, useEffect } from "react";
 import {
   Dialog,
   DialogContent,
@@ -24,57 +24,112 @@ interface StudentHandbookDialogProps {
 
 export function StudentHandbookDialog({ open, onOpenChange }: StudentHandbookDialogProps) {
   const [offenseType, setOffenseType] = useState<"major" | "minor">("major");
+  const [selectedOffense, setSelectedOffense] = useState<string>("");
+  const offenseRefs = useRef<{ [key: string]: HTMLDivElement | null }>({});
+  const scrollContainerRef = useRef<HTMLDivElement>(null);
 
   const currentOffenses = offenseType === "major" ? majorOffenses : minorOffenses;
 
+  // Reset selected offense when offense type changes
+  useEffect(() => {
+    setSelectedOffense("");
+  }, [offenseType]);
+
+  // Scroll to selected offense
+  useEffect(() => {
+    if (selectedOffense && offenseRefs.current[selectedOffense]) {
+      offenseRefs.current[selectedOffense]?.scrollIntoView({
+        behavior: "smooth",
+        block: "start",
+      });
+    }
+  }, [selectedOffense]);
+
+  const handleOffenseTypeChange = (value: "major" | "minor") => {
+    setOffenseType(value);
+  };
+
+  const handleOffenseSelect = (value: string) => {
+    setSelectedOffense(value);
+  };
+
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <DialogContent className="max-w-4xl max-h-[85vh]">
-        <DialogHeader>
-          <DialogTitle className="text-xl font-bold text-red-700">
+      <DialogContent className="w-[500vw] h-[90vh] max-w-none max-h-none flex flex-col">
+        <DialogHeader className="flex-shrink-0">
+          <DialogTitle className="text-lg font-bold text-red-700">
             TUP Student Handbook - Rules on Conduct & Discipline
           </DialogTitle>
-          <DialogDescription>
+          <DialogDescription className="text-xs">
             Official list of offenses and corresponding sanctions
           </DialogDescription>
         </DialogHeader>
 
-        <div className="space-y-4">
-          {/* Offense Type Selector */}
-          <div className="flex items-center gap-3">
-            <label className="text-sm font-semibold text-gray-700">
-              Select Offense Type:
-            </label>
-            <Select value={offenseType} onValueChange={(value: "major" | "minor") => setOffenseType(value)}>
-              <SelectTrigger className="w-[200px]">
-                <SelectValue placeholder="Select type" />
-              </SelectTrigger>
-              <SelectContent>
-                <SelectItem value="major">Major Offenses</SelectItem>
-                <SelectItem value="minor">Minor Offenses</SelectItem>
-              </SelectContent>
-            </Select>
+        <div className="flex flex-col gap-3 flex-1 min-h-0">
+          {/* Selectors */}
+          <div className="space-y-3 flex-shrink-0">
+            {/* Offense Type Selector */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-gray-700 whitespace-nowrap">
+                Offense Type:
+              </label>
+              <Select value={offenseType} onValueChange={handleOffenseTypeChange}>
+                <SelectTrigger className="w-[160px] h-9 text-sm">
+                  <SelectValue placeholder="Select type" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectItem value="major">Major Offenses</SelectItem>
+                  <SelectItem value="minor">Minor Offenses</SelectItem>
+                </SelectContent>
+              </Select>
+            </div>
+
+            {/* Jump to Offense Selector */}
+            <div className="flex items-center gap-2">
+              <label className="text-xs font-semibold text-gray-700 whitespace-nowrap">
+                Jump to:
+              </label>
+              <Select value={selectedOffense} onValueChange={handleOffenseSelect}>
+                <SelectTrigger className="w-[240px] h-9 text-sm">
+                  <SelectValue placeholder="Select offense number" />
+                </SelectTrigger>
+                <SelectContent className="max-h-[300px]">
+                  {currentOffenses.map((offense) => (
+                    <SelectItem key={offense.number} value={offense.number}>
+                      #{offense.number} - {offense.title.length > 30 ? offense.title.substring(0, 30) + "..." : offense.title}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
           </div>
 
           {/* Offenses List */}
-          <div className="h-[55vh] overflow-y-auto pr-4">
-            <div className="space-y-4">
+          <div ref={scrollContainerRef} className="flex-1 overflow-y-auto pr-4 min-h-0">
+            <div className="space-y-3">
               {currentOffenses.map((offense) => (
                 <div
                   key={offense.number}
-                  className="border border-gray-300 rounded-lg p-4 bg-white shadow-sm"
+                  ref={(el) => {
+                    offenseRefs.current[offense.number] = el;
+                  }}
+                  className={`border rounded-lg p-3 bg-white shadow-sm transition-all ${
+                    selectedOffense === offense.number
+                      ? "border-red-500 border-2 shadow-md"
+                      : "border-gray-300"
+                  }`}
                 >
                   {/* Offense Header */}
-                  <div className="mb-3">
+                  <div className="mb-2">
                     <div className="flex items-start gap-2">
-                      <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
+                      <span className={`inline-flex items-center justify-center w-7 h-7 rounded-full text-xs font-bold ${
                         offenseType === "major"
                           ? "bg-red-600 text-white"
                           : "bg-amber-500 text-white"
                       }`}>
                         {offense.number}
                       </span>
-                      <h3 className="text-base font-bold text-gray-900 flex-1 mt-1">
+                      <h3 className="text-sm font-bold text-gray-900 flex-1 mt-0.5">
                         {offense.title}
                       </h3>
                     </div>
@@ -82,8 +137,8 @@ export function StudentHandbookDialog({ open, onOpenChange }: StudentHandbookDia
 
                   {/* Offense Items */}
                   {offense.items && offense.items.length > 0 && (
-                    <div className="mb-3 ml-10">
-                      <ul className="list-disc list-outside space-y-1 text-sm text-gray-700">
+                    <div className="mb-2 ml-8">
+                      <ul className="list-disc list-outside space-y-0.5 text-xs text-gray-700">
                         {offense.items.map((item, idx) => (
                           <li key={idx} className="pl-1">
                             {item}
@@ -94,33 +149,33 @@ export function StudentHandbookDialog({ open, onOpenChange }: StudentHandbookDia
                   )}
 
                   {/* Sanctions */}
-                  <div className="ml-10 mt-3 pt-3 border-t border-gray-200">
-                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-2">
+                  <div className="ml-8 mt-2 pt-2 border-t border-gray-200">
+                    <h4 className="text-xs font-bold text-gray-700 uppercase tracking-wide mb-1.5">
                       Sanctions:
                     </h4>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-2 text-xs">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-1.5 text-xs">
                       {offense.sanctions.first && (
-                        <div className="bg-yellow-50 border border-yellow-200 rounded p-2">
-                          <div className="font-semibold text-yellow-800 mb-1">
+                        <div className="bg-yellow-50 border border-yellow-200 rounded p-1.5">
+                          <div className="font-semibold text-yellow-800 mb-0.5 text-xs">
                             1st Offense:
                           </div>
-                          <div className="text-gray-700">{offense.sanctions.first}</div>
+                          <div className="text-gray-700 text-xs">{offense.sanctions.first}</div>
                         </div>
                       )}
                       {offense.sanctions.second && (
-                        <div className="bg-orange-50 border border-orange-200 rounded p-2">
-                          <div className="font-semibold text-orange-800 mb-1">
+                        <div className="bg-orange-50 border border-orange-200 rounded p-1.5">
+                          <div className="font-semibold text-orange-800 mb-0.5 text-xs">
                             2nd Offense:
                           </div>
-                          <div className="text-gray-700">{offense.sanctions.second}</div>
+                          <div className="text-gray-700 text-xs">{offense.sanctions.second}</div>
                         </div>
                       )}
                       {offense.sanctions.third && (
-                        <div className="bg-red-50 border border-red-200 rounded p-2">
-                          <div className="font-semibold text-red-800 mb-1">
+                        <div className="bg-red-50 border border-red-200 rounded p-1.5">
+                          <div className="font-semibold text-red-800 mb-0.5 text-xs">
                             3rd Offense:
                           </div>
-                          <div className="text-gray-700">{offense.sanctions.third}</div>
+                          <div className="text-gray-700 text-xs">{offense.sanctions.third}</div>
                         </div>
                       )}
                     </div>
@@ -131,7 +186,7 @@ export function StudentHandbookDialog({ open, onOpenChange }: StudentHandbookDia
           </div>
 
           {/* Footer Note */}
-          <div className="text-xs text-gray-500 italic border-t pt-3">
+          <div className="text-xs text-gray-500 italic border-t pt-2 flex-shrink-0">
             {offenseType === "major" ? (
               <p>
                 <strong>Note:</strong> For TAGUIG/VISAYAS CAMPUSES ON TRIMESTER BASIS: 
