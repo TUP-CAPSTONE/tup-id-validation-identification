@@ -64,7 +64,6 @@ export function IdValidationTable({ requests, onUpdate }: Props) {
           }
         >
           Student Name
-          <ArrowUpDown className="h-4 w-4" />
         </div>
       ),
       cell: ({ row }) => row.original.studentName,
@@ -83,6 +82,21 @@ export function IdValidationTable({ requests, onUpdate }: Props) {
       enableSorting: false,
     },
 
+    {
+      accessorKey: "yearLevel",
+      header: ({ column }) => (
+        <div
+          className={`${cellBase} ${sortableHeader}`}
+          onClick={() =>
+            column.toggleSorting(column.getIsSorted() === "asc")
+          }
+        >
+          Year Level
+        </div>
+      ),
+      cell: ({ row }) => row.original.yearLevel,
+    },
+
     // ✅ REQUESTED AT — SORTABLE
     {
       accessorKey: "requestTime",
@@ -94,7 +108,6 @@ export function IdValidationTable({ requests, onUpdate }: Props) {
           }
         >
           Requested At
-          <ArrowUpDown className="h-4 w-4" />
         </div>
       ),
       cell: ({ row }) => {

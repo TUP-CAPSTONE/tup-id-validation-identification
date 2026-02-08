@@ -5,9 +5,9 @@ const nextConfig: NextConfig = {
     remotePatterns: [
       {
         protocol: 'https',
-        hostname: 'firebasestorage.googleapis.com',
+        hostname: 'storage.googleapis.com',
         port: '',
-        pathname: '/**',
+        pathname: '/tup-id-verification.firebasestorage.app/**',
       },
     ],
   },
