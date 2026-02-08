@@ -40,6 +40,30 @@ export const rateLimiters = {
     analytics: true,
     prefix: "ratelimit:email",
   }),
+
+  // Student profile fetch - 20 per minute
+  studentProfile: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(20, "1 m"),
+    analytics: true,
+    prefix: "ratelimit:student:profile",
+  }),
+
+  // Student validation status check - 10 per minute
+  studentValidationStatus: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(10, "1 m"),
+    analytics: true,
+    prefix: "ratelimit:student:validation:status",
+  }),
+
+  // Student validation submission - 3 per hour (strict to prevent spam)
+  studentValidationSubmit: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(20, "1 h"),
+    analytics: true,
+    prefix: "ratelimit:student:validation:submit",
+  }),
 }
 
 // Helper function to check rate limit and return standardized response

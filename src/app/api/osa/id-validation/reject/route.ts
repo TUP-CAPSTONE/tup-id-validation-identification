@@ -54,34 +54,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Authentication failed" }, { status: 401 })
     }
 
-    // ⚡ Rate limiting (optional - only if Upstash configured)
-    let rateLimitResult: any = null
-    if (rateLimiters && checkRateLimit) {
-      try {
-        rateLimitResult = await checkRateLimit(
-          rateLimiters.rejectValidation,
-          `osa:${adminUserId}`
-        )
-
-        if (!rateLimitResult.success) {
-          return NextResponse.json(
-            { 
-              error: "Too many requests. Please wait before rejecting more requests.",
-              retryAfter: rateLimitResult.reset - Date.now()
-            },
-            { 
-              status: 429,
-              headers: {
-                ...createRateLimitHeaders(rateLimitResult),
-                'Retry-After': Math.ceil((rateLimitResult.reset - Date.now()) / 1000).toString()
-              }
-            }
-          )
-        }
-      } catch (rateLimitError) {
-        console.warn("⚠️ Rate limit check failed (continuing anyway):", rateLimitError)
-      }
-    }
 
     // 📄 Fetch validation request
     const requestRef = adminDB.collection("validation_requests2").doc(requestId)
@@ -199,15 +171,11 @@ export async function POST(req: Request) {
     await batch.commit()
     console.log("✅ Rejection processed, saved to rejected_validation, and email queued")
 
-    const responseHeaders = rateLimitResult && createRateLimitHeaders 
-      ? createRateLimitHeaders(rateLimitResult) 
-      : {}
-
     return NextResponse.json({ 
       success: true,
       rejectedDocId: rejectedRef.id
     }, {
-      headers: responseHeaders
+      status: 200,
     })
 
   } catch (error: any) {

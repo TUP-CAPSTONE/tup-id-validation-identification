@@ -5,22 +5,21 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import WebcamCapture from '@/components/webcam-capture';
-import { auth, db } from "@/lib/firebaseConfig";
-import { collection, addDoc, setDoc, serverTimestamp, query, where, getDocs, doc, getDoc } from "firebase/firestore";
+import { auth } from "@/lib/firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
-import { getStorage, ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { ArrowLeft } from "lucide-react";
 
 export default function StudentValidationRequest() {
   const router = useRouter();
   const [currentUser, setCurrentUser] = useState<any>(null);
+  const [idToken, setIdToken] = useState<string | null>(null);
   const [studentProfile, setStudentProfile] = useState<any>(null);
   const [existingRequest, setExistingRequest] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showResubmitForm, setShowResubmitForm] = useState(false);
   
   const [corFile, setCorFile] = useState<File | null>(null);
-  const [corFileUrl, setCorFileUrl] = useState<string | null>(null);
+  const [corFileBase64, setCorFileBase64] = useState<string | null>(null);
   const [corFilePreview, setCorFilePreview] = useState<string | null>(null);
   const [corFileName, setCorFileName] = useState<string | null>(null);
   const [idPhoto, setIdPhoto] = useState<string | null>(null);
@@ -104,6 +103,48 @@ export default function StudentValidationRequest() {
     if (!college) return [];
     return collegeCoursesMap[college] || [];
   };
+
+  /**
+   * Fetch data from API endpoints
+   */
+  const fetchData = async (token: string, uid: string) => {
+    try {
+      // Fetch student profile
+      const profileResponse = await fetch('/api/student/profile', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (profileResponse.ok) {
+        const profileResult = await profileResponse.json();
+        if (profileResult.success && profileResult.data) {
+          setStudentProfile(profileResult.data);
+        }
+      }
+
+      // Fetch validation request status
+      const statusResponse = await fetch('/api/student/validation-request/status', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (statusResponse.ok) {
+        const statusResult = await statusResponse.json();
+        if (statusResult.success && statusResult.data) {
+          setExistingRequest(statusResult.data);
+        }
+      }
+    } catch (err) {
+      console.error('Error fetching data:', err);
+    }
+  };
+
   useEffect(() => {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
@@ -114,42 +155,14 @@ export default function StudentValidationRequest() {
       setCurrentUser(user);
 
       try {
-        // Get student profile (new: student_profiles, doc id is TUPID)
-        let profileData: any = null;
+        // Get ID token for API authentication
+        const token = await user.getIdToken();
+        setIdToken(token);
 
-        const profileQuery = query(
-          collection(db, 'student_profiles'),
-          where('uid', '==', user.uid)
-        );
-        const profileSnap = await getDocs(profileQuery);
-
-        if (!profileSnap.empty) {
-          profileData = profileSnap.docs[0].data();
-        } else {
-          // Fallback for older records
-          const studentDocRef = doc(db, 'students', user.uid);
-          const studentSnap = await getDoc(studentDocRef);
-          if (studentSnap.exists()) {
-            profileData = studentSnap.data();
-          }
-        }
-
-        if (profileData) {
-          setStudentProfile(profileData);
-        }
-
-        // Check for existing validation request
-        const q = query(
-          collection(db, 'validation_requests2'),
-          where('studentId', '==', user.uid)
-        );
-        const snapshot = await getDocs(q);
-        
-        if (!snapshot.empty) {
-          setExistingRequest({ id: snapshot.docs[0].id, ...snapshot.docs[0].data() });
-        }
+        // Fetch data from APIs
+        await fetchData(token, user.uid);
       } catch (err) {
-        console.error('Error loading data:', err);
+        console.error('Error in auth state change:', err);
       } finally {
         setLoading(false);
       }
@@ -159,280 +172,136 @@ export default function StudentValidationRequest() {
   }, []);
 
   /**
-   * Handle COR file upload to Firebase Storage
+   * Handle COR file upload - convert to base64
    */
   const handleCorUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
-  const file = e.target.files?.[0];
-  if (!file) return;
+    const file = e.target.files?.[0];
+    if (!file) return;
 
-  if (file.size > 10 * 1024 * 1024) {
-    setError('File is too large. Max 10MB.');
-    return;
-  }
-
-  try {
-    setError(null);
-
-    // Store file locally ONLY (no upload yet)
-    setCorFile(file);
-    setCorFileName(file.name);
-
-    // Generate preview
-    if (file.type.startsWith('image/')) {
-      const reader = new FileReader();
-      reader.onload = (event) => {
-        setCorFilePreview(event.target?.result as string);
-      };
-      reader.readAsDataURL(file);
-    } else {
-      setCorFilePreview(null);
-    }
-
-  } catch (err: any) {
-    console.error('Error handling COR:', err);
-    setError('Failed to process COR file');
-  }
-};
-
-
-  /**
-   * Convert base64 string to Blob
-   */
-  const base64ToBlob = (base64: string): Blob => {
-    try {
-      console.log('base64ToBlob input length:', base64.length);
-      console.log('base64ToBlob first 100 chars:', base64.substring(0, 100));
-      
-      const parts = base64.split(';base64,');
-      console.log('Parts after split:', parts.length);
-      console.log('Part[0] (header):', parts[0]);
-      console.log('Part[1] length:', parts[1] ? parts[1].length : 'undefined');
-      
-      const contentType = parts[0].split(':')[1];
-      console.log('Extracted contentType:', contentType);
-      
-      const raw = window.atob(parts[1]);
-      console.log('Decoded raw length:', raw.length);
-      
-      const rawLength = raw.length;
-      const uInt8Array = new Uint8Array(rawLength);
-
-      for (let i = 0; i < rawLength; ++i) {
-        uInt8Array[i] = raw.charCodeAt(i);
-      }
-
-      const blob = new Blob([uInt8Array], { type: contentType });
-      console.log('Blob created successfully:', blob.size, 'bytes,', blob.type);
-      return blob;
-    } catch (error: any) {
-      console.error('Error in base64ToBlob:', error);
-      throw new Error(`base64ToBlob failed: ${error.message}`);
-    }
-  };
-
-  /**
-   * Upload base64 image to Firebase Storage
-   * Uses consistent file naming (NO timestamp) to overwrite previous images
-   */
-  const uploadImageToStorage = async (base64Image: string, imageName: string): Promise<string> => {
-    // Ensure we have a string
-    if (!base64Image || typeof base64Image !== 'string') {
-      throw new Error(`${imageName} is not a valid string. Received: ${typeof base64Image}`);
-    }
-
-    // Trim any whitespace
-    let trimmedImage = base64Image.trim();
-
-    console.log(`[${imageName}] Initial validation:`);
-    console.log(`  - Length: ${trimmedImage.length} chars`);
-    console.log(`  - First 100 chars: ${trimmedImage.substring(0, 100)}`);
-
-    // Check if it's already a URL (in case of resubmission)
-    if (trimmedImage.startsWith('http://') || trimmedImage.startsWith('https://')) {
-      console.log(`[${imageName}] Already a Firebase Storage URL, returning as-is`);
-      return trimmedImage;
-    }
-
-    // Validate format: must be data:image/[type];base64,[data]
-    if (!trimmedImage.startsWith('data:')) {
-      console.error(`[${imageName}] ERROR: Does not start with 'data:'`);
-      throw new Error(`Invalid image format for ${imageName}. Must start with 'data:image/...'`);
-    }
-
-    // Check if format includes ;base64,
-    if (!trimmedImage.includes(';base64,')) {
-      console.error(`[${imageName}] ERROR: Missing ';base64,' separator`);
-      console.error(`  Current format: ${trimmedImage.substring(0, 150)}`);
-      throw new Error(`Invalid image format for ${imageName}. Must include ';base64,' separator`);
-    }
-
-    // Validate data part is not empty
-    const parts = trimmedImage.split(';base64,');
-    const datapart = parts[1];
-    if (!datapart || datapart.length === 0) {
-      console.error(`[${imageName}] ERROR: Base64 data is empty after ';base64,' separator`);
-      throw new Error(`Invalid image format for ${imageName}. Base64 data is empty`);
-    }
-
-    console.log(`[${imageName}] Format validation passed`);
-    console.log(`  - MIME type: ${parts[0].substring(5)}`);
-    console.log(`  - Data length: ${datapart.length} chars`);
-
-    try {
-      const storage = getStorage();
-      const studentNumber = studentProfile?.studentNumber || studentProfile?.tup_id || 'unknown';
-      // REMOVED timestamp from fileName to enable overwriting
-      const fileName = `${studentNumber}_${imageName}.jpg`;
-      const storageRef = ref(storage, `ID_Validation_Files/${studentNumber}/${fileName}`);
-
-      // Convert base64 to Blob and upload
-      console.log(`[${imageName}] Converting base64 to Blob...`);
-      const blob = base64ToBlob(trimmedImage);
-      console.log(`[${imageName}] Blob created: ${blob.size} bytes, type: ${blob.type}`);
-      
-      console.log(`[${imageName}] Uploading to Firebase Storage...`);
-      const snapshot = await uploadBytes(storageRef, blob);
-      const url = await getDownloadURL(snapshot.ref);
-      console.log(`✓ [${imageName}] Successfully uploaded to: ${url}`);
-      return url;
-    } catch (uploadError: any) {
-      console.error(`✗ [${imageName}] Upload failed:`, uploadError);
-      console.error(`  Error code: ${uploadError.code}`);
-      console.error(`  Error message: ${uploadError.message}`);
-      throw new Error(`Failed to upload ${imageName}: ${uploadError.message}`);
-    }
-  };
-
-  /**
-   * Submit validation request to Firestore with Firebase Storage URLs
-   */
-  const handleSubmit = async () => {
-  if (!currentUser) {
-    setError('You must be logged in');
-    return;
-  }
-
-  if (!corFile || !idPhoto || !faceFront || !faceLeft || !faceRight) {
-    setError('Please complete all required fields and captures');
-    return;
-  }
-
-  if (!course.trim() || !section.trim() || !yearLevel.trim()) {
-    setError('Please fill in college, course, section, and year level');
-    return;
-  }
-
-  setSubmitting(true);
-  setError(null);
-
-  try {
-    const fullName =
-      studentProfile?.fullName ||
-      studentProfile?.name ||
-      `${studentProfile?.firstName || ''} ${studentProfile?.lastName || ''}`.trim() ||
-      'Unknown';
-
-    const studentNumber =
-      studentProfile?.studentNumber ||
-      studentProfile?.tup_id ||
-      studentProfile?.studentId ||
-      'unknown';
-
-    const storage = getStorage();
-
-    console.log('Uploading all files to Firebase Storage...');
-
-    // 🔥 Upload COR here (only on submit)
-    const corRef = ref(
-      storage,
-      `ID_Validation_Files/${studentNumber}/${studentNumber}_cor`
-    );
-
-    await uploadBytes(corRef, corFile);
-    const corUrl = await getDownloadURL(corRef);
-
-    // 🔥 Upload ID + Face Images (overwrite enabled via same filename)
-    const [idPictureUrl, faceFrontUrl, faceLeftUrl, faceRightUrl] =
-      await Promise.all([
-        uploadImageToStorage(idPhoto, 'id_picture'),
-        uploadImageToStorage(faceFront, 'pose_front'),
-        uploadImageToStorage(faceLeft, 'pose_left'),
-        uploadImageToStorage(faceRight, 'pose_right'),
-      ]);
-
-    const requestData = {
-      studentId: currentUser.uid,
-      tupId: studentNumber,
-      studentName: fullName,
-      email: currentUser.email,
-      phoneNumber:
-        studentProfile?.phone ||
-        studentProfile?.student_phone_num ||
-        '',
-      course: course.trim(),
-      section: section.trim(),
-      yearLevel: yearLevel.trim(),
-
-      // ✅ Store uploaded URLs
-      cor: corUrl,
-      idPicture: idPictureUrl,
-
-      selfiePictures: {
-        front: faceFrontUrl,
-        left: faceLeftUrl,
-        back: faceRightUrl,
-      },
-
-      status: 'pending',
-      requestTime: serverTimestamp(),
-      rejectRemarks: null,
-    };
-
-    // Prevent resubmission if already accepted
-    if (existingRequest && existingRequest.status === 'accepted') {
-      setError(
-        'You have already been validated. You cannot submit another request.'
-      );
-      setSubmitting(false);
+    if (file.size > 10 * 1024 * 1024) {
+      setError('File is too large. Max 10MB.');
       return;
     }
 
-    const requestDocRef = doc(
-      db,
-      'validation_requests2',
-      studentNumber
-    );
+    try {
+      setError(null);
+      setCorFile(file);
+      setCorFileName(file.name);
 
-    if (existingRequest && existingRequest.status === 'rejected') {
-      await setDoc(requestDocRef, requestData, { merge: true });
-    } else {
-      await setDoc(requestDocRef, requestData);
+      // Convert to base64
+      const reader = new FileReader();
+      reader.onload = (event) => {
+        const base64 = event.target?.result as string;
+        setCorFileBase64(base64);
+
+        // Generate preview for images
+        if (file.type.startsWith('image/')) {
+          setCorFilePreview(base64);
+        } else {
+          setCorFilePreview(null);
+        }
+      };
+      reader.readAsDataURL(file);
+
+    } catch (err: any) {
+      console.error('Error handling COR:', err);
+      setError('Failed to process COR file');
+    }
+  };
+
+  /**
+   * Submit validation request via API
+   */
+  const handleSubmit = async () => {
+    if (!currentUser || !idToken) {
+      setError('You must be logged in');
+      return;
     }
 
-    setSuccess(true);
+    if (!corFileBase64 || !idPhoto || !faceFront || !faceLeft || !faceRight) {
+      setError('Please complete all required fields and captures');
+      return;
+    }
 
-    // Reset form
-    setCorFile(null);
-    setCorFilePreview(null);
-    setCorFileName(null);
-    setIdPhoto(null);
-    setFaceFront(null);
-    setFaceLeft(null);
-    setFaceRight(null);
-    setCollege('');
-    setCourse('');
-    setSection('');
-    setYearLevel('');
-    setShowResubmitForm(false);
+    if (!course.trim() || !section.trim() || !yearLevel.trim()) {
+      setError('Please fill in college, course, section, and year level');
+      return;
+    }
 
-  } catch (err: any) {
-    console.error('Error submitting:', err);
-    setError(err.message || 'Failed to submit request');
-  } finally {
-    setSubmitting(false);
-  }
-};
+    setSubmitting(true);
+    setError(null);
 
+    try {
+      const fullName =
+        studentProfile?.fullName ||
+        studentProfile?.name ||
+        `${studentProfile?.firstName || ''} ${studentProfile?.lastName || ''}`.trim() ||
+        'Unknown';
+
+      const studentNumber =
+        studentProfile?.studentNumber ||
+        studentProfile?.tup_id ||
+        studentProfile?.studentId ||
+        'unknown';
+
+      // Call API endpoint
+      const response = await fetch('/api/student/validation-request/submit', {
+        method: 'POST',
+        headers: {
+          'Authorization': `Bearer ${idToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          studentNumber,
+          studentName: fullName,
+          email: currentUser.email,
+          phoneNumber: studentProfile?.phone || studentProfile?.student_phone_num || '',
+          course: course.trim(),
+          section: section.trim(),
+          yearLevel: yearLevel.trim(),
+          corFile: corFileBase64,
+          corFileName: corFileName,
+          idPhoto,
+          faceFront,
+          faceLeft,
+          faceRight,
+        }),
+      });
+
+      const result = await response.json();
+
+      if (!response.ok) {
+        throw new Error(result.error || 'Failed to submit request');
+      }
+
+      if (result.success) {
+        setSuccess(true);
+
+        // Reset form
+        setCorFile(null);
+        setCorFileBase64(null);
+        setCorFilePreview(null);
+        setCorFileName(null);
+        setIdPhoto(null);
+        setFaceFront(null);
+        setFaceLeft(null);
+        setFaceRight(null);
+        setCollege('');
+        setCourse('');
+        setSection('');
+        setYearLevel('');
+        setShowResubmitForm(false);
+      } else {
+        throw new Error(result.error || 'Submission failed');
+      }
+
+    } catch (err: any) {
+      console.error('Error submitting:', err);
+      setError(err.message || 'Failed to submit request');
+    } finally {
+      setSubmitting(false);
+    }
+  };
 
   /**
    * Go back to main dashboard
@@ -556,7 +425,7 @@ export default function StudentValidationRequest() {
     );
   }
 
-  const allCaptured = corFile && idPhoto && faceFront && faceLeft && faceRight && course.trim() && section.trim() && yearLevel.trim();
+  const allCaptured = corFileBase64 && idPhoto && faceFront && faceLeft && faceRight && course.trim() && section.trim() && yearLevel.trim();
 
   return (
     <div className="w-full max-w-6xl space-y-6">
@@ -622,7 +491,6 @@ export default function StudentValidationRequest() {
                 value={college}
                 onChange={(e) => {
                   setCollege(e.target.value);
-                  // Reset course when college changes
                   setCourse('');
                 }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
@@ -688,6 +556,7 @@ export default function StudentValidationRequest() {
                 <option value="2nd Year">2nd Year</option>
                 <option value="3rd Year">3rd Year</option>
                 <option value="4th Year">4th Year</option>
+                <option value="5th Year">5th Year</option>
               </select>
             </div>
           </div>
@@ -698,7 +567,7 @@ export default function StudentValidationRequest() {
       <Card className="border-red-200">
         <CardHeader className="bg-red-50">
           <CardTitle className="text-red-700">Certificate of Registration (COR)</CardTitle>
-          <CardDescription>Upload your COR document (Image, max 10MB)</CardDescription>
+          <CardDescription>Upload your COR document (Image or PDF, max 10MB)</CardDescription>
         </CardHeader>
         <CardContent className="pt-6 space-y-4">
           <input
@@ -847,8 +716,8 @@ export default function StudentValidationRequest() {
         </CardHeader>
         <CardContent className="pt-6 space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div className={`flex items-center gap-3 p-3 rounded-lg border ${corFile ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
-              <span className="text-2xl">{corFile ? "✅" : "⬜"}</span>
+            <div className={`flex items-center gap-3 p-3 rounded-lg border ${corFileBase64 ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
+              <span className="text-2xl">{corFileBase64 ? "✅" : "⬜"}</span>
               <span className="font-medium">COR</span>
             </div>
             <div className={`flex items-center gap-3 p-3 rounded-lg border ${idPhoto ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
