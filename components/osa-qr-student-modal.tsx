@@ -26,6 +26,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert"
 
 interface StudentInfo {
   id: string
+  tupId: string
   name: string
   course: string
   section: string
@@ -120,7 +121,7 @@ export function StudentModal({
                 {student.name}
               </h3>
               <p className="text-sm text-slate-600 font-medium mt-1">
-                {student.id}
+                {student.tupId}
               </p>
               
               <div className="mt-2">

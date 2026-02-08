@@ -8,7 +8,7 @@ import {
   generateQRCodeImage,
   calculateExpirationDate 
 } from "@/lib/qr-utils"
-import { buildValidationEmailHTML } from "@/lib/email-templates/validation-email"
+import { buildValidationEmailHTML } from "@/lib/email-templates/validation-accept-email"
 
 // Optional: Import rate limiting only if Upstash is configured
 let rateLimiters: any = null
@@ -170,6 +170,7 @@ export async function POST(req: Request) {
       isUsed: false,
       createdAt: now,
       studentInfo: {
+        tupId: tupId, // Store TUP ID
         name: studentName,
         course,
         section,

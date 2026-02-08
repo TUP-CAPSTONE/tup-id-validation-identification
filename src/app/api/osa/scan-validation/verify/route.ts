@@ -109,6 +109,7 @@ export async function POST(req: Request) {
       qrCodeId: qrCodeDoc.id,
       student: {
         id: studentId,
+        tupId: qrCodeData.studentInfo.tupId || studentId, // Include TUP ID
         name: qrCodeData.studentInfo.name,
         course: qrCodeData.studentInfo.course,
         section: qrCodeData.studentInfo.section,

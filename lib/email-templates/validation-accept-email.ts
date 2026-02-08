@@ -37,7 +37,23 @@ export function buildValidationEmailHTML(params: ValidationEmailParams): string 
             <div style="font-size:15px;color:#0f172a;font-weight:700;margin-bottom:14px;">
               📱 Your Validation QR Code
             </div>
-            <img src="cid:qrcode@validation" alt="Validation QR Code" style="width:280px;height:280px;border-radius:12px;background:#fff;padding:12px;box-shadow:0 4px 10px rgba(0,0,0,0.08);" />
+            <img 
+  src="cid:qrcode@validation" 
+  alt="Validation QR Code" 
+  width="280"
+  style="
+    display:block;
+    width:100%;
+    max-width:280px;
+    height:auto;
+    border-radius:12px;
+    background:#fff;
+    padding:12px;
+    box-shadow:0 4px 10px rgba(0,0,0,0.08);
+    margin:0 auto;
+  " 
+/>
+
             <div style="margin-top:16px;font-size:13px;color:#64748b;line-height:1.6;">
               <b>Student ID:</b> ${studentId}
             </div>
