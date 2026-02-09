@@ -14,54 +14,91 @@ import {
   BreadcrumbPage,
 } from "@/components/ui/breadcrumb"
 import { Separator } from "@/components/ui/separator"
-
-import { db } from "@/lib/firebaseConfig"
-import { collection, getDocs } from "firebase/firestore"
+import { toast } from "sonner"
 
 import {
   IdValidationTable,
   ValidationRequest,
 } from "@/components/osa-id-validation-table"
 
+interface ValidationResponse {
+  requests: ValidationRequest[]
+  hasMore: boolean
+  lastRequestId: string | null
+  totalFetched: number
+}
+
 export default function ValidationPage() {
   const [requests, setRequests] = useState<ValidationRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [hasMore, setHasMore] = useState(false)
+  const [lastRequestId, setLastRequestId] = useState<string | null>(null)
+  const [pageSize, setPageSize] = useState(10)
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
+  const [sortBy, setSortBy] = useState("requestTime")
+  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
 
-  const fetchRequests = async () => {
+  const fetchRequests = async (
+    cursor: string | null = null,
+    newPageSize: number = pageSize,
+    newStatus?: string,
+    newSortBy?: string,
+    newSortOrder?: "asc" | "desc"
+  ) => {
     try {
       setLoading(true)
-      const snapshot = await getDocs(collection(db, "validation_requests2"))
 
-      const data = snapshot.docs.map((doc) => {
-        const docData = doc.data()
-
-        return {
-          id: doc.id,  // Add document ID for updates
-          requestId: doc.id,
-          studentId: docData.studentId,
-          studentName: docData.studentName,
-          tupId: docData.tupId,
-          email: docData.email,
-          phoneNumber: docData.phoneNumber,
-          course: docData.course || '',
-          section: docData.section || '',
-          yearLevel: docData.yearLevel || '',
-          idPicture: docData.idPicture,
-          corFile: docData.cor || docData.corFile,  // Use 'cor' first (student form field name)
-          selfiePictures: docData.selfiePictures,
-          status: docData.status,
-          rejectRemarks: docData.rejectRemarks,
-
-          // ✅ Firestore Timestamp → string
-          requestTime: docData.requestTime
-            ? docData.requestTime.toDate().toISOString()
-            : "",
-        }
+      const params = new URLSearchParams({
+        pageSize: newPageSize.toString(),
       })
 
-      setRequests(data)
+      if (cursor) {
+        params.append("lastRequestId", cursor)
+      }
+
+      if (newStatus) {
+        params.append("status", newStatus)
+      }
+
+      if (newSortBy) {
+        params.append("sortBy", newSortBy)
+      }
+
+      if (newSortOrder) {
+        params.append("sortOrder", newSortOrder)
+      }
+
+      const response = await fetch(`/api/osa/validation-requests?${params.toString()}`)
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          const data = await response.json()
+          toast.error("Rate limit exceeded", {
+            description: data.error || "Too many requests. Please try again later.",
+          })
+          return
+        }
+        
+        // Log the error details
+        const errorText = await response.text()
+        console.error("API Error Response:", errorText)
+        console.error("Status:", response.status)
+        
+        toast.error("Error", {
+          description: `Failed to fetch validation requests (Status: ${response.status})`,
+        })
+        return
+      }
+
+      const data: ValidationResponse = await response.json()
+      setRequests(data.requests)
+      setHasMore(data.hasMore)
+      setLastRequestId(data.lastRequestId)
     } catch (error) {
       console.error("Error fetching requests:", error)
+      toast.error("Error", {
+        description: "Failed to load validation requests. Please try again.",
+      })
     } finally {
       setLoading(false)
     }
@@ -71,10 +108,35 @@ export default function ValidationPage() {
     fetchRequests()
   }, [])
 
+  const handlePageChange = (cursor: string | null) => {
+    fetchRequests(cursor, pageSize, statusFilter, sortBy, sortOrder)
+  }
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize)
+    fetchRequests(null, newSize, statusFilter, sortBy, sortOrder)
+  }
+
+  const handleStatusFilterChange = (newStatus: string | undefined) => {
+    setStatusFilter(newStatus)
+    fetchRequests(null, pageSize, newStatus, sortBy, sortOrder)
+  }
+
+  const handleSortChange = (column: string, order: "asc" | "desc") => {
+    setSortBy(column)
+    setSortOrder(order)
+    fetchRequests(null, pageSize, statusFilter, column, order)
+  }
+
+  const handleUpdate = () => {
+    // Refresh the current page
+    fetchRequests(null, pageSize, statusFilter, sortBy, sortOrder)
+  }
+
   return (
     <SidebarProvider
       style={{
-        "--sidebar-width": "20rem", // This matches your w-80 (20rem) sidebar
+        "--sidebar-width": "20rem",
       } as React.CSSProperties}
     >
       <AppSidebar />
@@ -95,7 +157,7 @@ export default function ValidationPage() {
         </header>
 
         <div className="p-4">
-          {loading ? (
+          {loading && requests.length === 0 ? (
             <div className="flex items-center justify-center p-8">
               <div className="text-center">
                 <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#b32032] mx-auto mb-4"></div>
@@ -103,7 +165,21 @@ export default function ValidationPage() {
               </div>
             </div>
           ) : (
-            <IdValidationTable requests={requests} onUpdate={fetchRequests} />
+            <IdValidationTable
+              requests={requests}
+              onUpdate={handleUpdate}
+              hasMore={hasMore}
+              lastRequestId={lastRequestId}
+              onPageChange={handlePageChange}
+              pageSize={pageSize}
+              onPageSizeChange={handlePageSizeChange}
+              statusFilter={statusFilter}
+              onStatusFilterChange={handleStatusFilterChange}
+              sortBy={sortBy}
+              sortOrder={sortOrder}
+              onSortChange={handleSortChange}
+              loading={loading}
+            />
           )}
         </div>
       </SidebarInset>

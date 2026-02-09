@@ -1,6 +1,6 @@
 "use client"
 
-import { Eye, ArrowUpDown } from "lucide-react"
+import { Eye } from "lucide-react"
 import { ColumnDef } from "@tanstack/react-table"
 import { useState } from "react"
 
@@ -26,7 +26,7 @@ export type ValidationRequest = {
     left: string
     back: string
   }
-  corFile: string;
+  corFile: string
   status: "pending" | "accepted" | "rejected"
   requestTime: string
   rejectRemarks?: string
@@ -35,11 +35,35 @@ export type ValidationRequest = {
 interface Props {
   requests: ValidationRequest[]
   onUpdate?: () => void
+  hasMore: boolean
+  lastRequestId: string | null
+  onPageChange: (cursor: string | null) => void
+  pageSize: number
+  onPageSizeChange: (size: number) => void
+  statusFilter?: string
+  onStatusFilterChange: (status: string | undefined) => void
+  sortBy: string
+  sortOrder: "asc" | "desc"
+  onSortChange: (column: string, order: "asc" | "desc") => void
+  loading: boolean
 }
 
-export function IdValidationTable({ requests, onUpdate }: Props) {
-  const [selected, setSelected] =
-    useState<ValidationRequest | null>(null)
+export function IdValidationTable({
+  requests,
+  onUpdate,
+  hasMore,
+  lastRequestId,
+  onPageChange,
+  pageSize,
+  onPageSizeChange,
+  statusFilter,
+  onStatusFilterChange,
+  sortBy,
+  sortOrder,
+  onSortChange,
+  loading,
+}: Props) {
+  const [selected, setSelected] = useState<ValidationRequest | null>(null)
   const [open, setOpen] = useState(false)
 
   const handleUpdate = () => {
@@ -49,27 +73,16 @@ export function IdValidationTable({ requests, onUpdate }: Props) {
   }
 
   const cellBase = "flex items-center h-full"
-  const sortableHeader =
-    "flex items-center gap-1 cursor-pointer select-none hover:text-primary"
 
   const columns: ColumnDef<ValidationRequest>[] = [
-    // ✅ STUDENT NAME — SORTABLE
+    // STUDENT NAME — SORTABLE
     {
       accessorKey: "studentName",
-      header: ({ column }) => (
-        <div
-          className={`${cellBase} ${sortableHeader}`}
-          onClick={() =>
-            column.toggleSorting(column.getIsSorted() === "asc")
-          }
-        >
-          Student Name
-        </div>
-      ),
+      header: () => <div className={cellBase}>Student Name</div>,
       cell: ({ row }) => row.original.studentName,
     },
 
-    // ❌ NOT SORTABLE
+    // NOT SORTABLE
     {
       accessorKey: "tupId",
       header: () => <div className={cellBase}>TUP ID</div>,
@@ -84,32 +97,14 @@ export function IdValidationTable({ requests, onUpdate }: Props) {
 
     {
       accessorKey: "yearLevel",
-      header: ({ column }) => (
-        <div
-          className={`${cellBase} ${sortableHeader}`}
-          onClick={() =>
-            column.toggleSorting(column.getIsSorted() === "asc")
-          }
-        >
-          Year Level
-        </div>
-      ),
+      header: () => <div className={cellBase}>Year Level</div>,
       cell: ({ row }) => row.original.yearLevel,
     },
 
-    // ✅ REQUESTED AT — SORTABLE
+    // REQUESTED AT — SORTABLE
     {
       accessorKey: "requestTime",
-      header: ({ column }) => (
-        <div
-          className={`${cellBase} ${sortableHeader}`}
-          onClick={() =>
-            column.toggleSorting(column.getIsSorted() === "asc")
-          }
-        >
-          Requested At
-        </div>
-      ),
+      header: () => <div className={cellBase}>Requested At</div>,
       cell: ({ row }) => {
         const date = new Date(row.original.requestTime)
         return date.toLocaleString("en-PH", {
@@ -122,7 +117,7 @@ export function IdValidationTable({ requests, onUpdate }: Props) {
       },
     },
 
-    // ❌ NOT SORTABLE
+    // NOT SORTABLE
     {
       accessorKey: "status",
       header: () => <div className={cellBase}>Status</div>,
@@ -142,12 +137,10 @@ export function IdValidationTable({ requests, onUpdate }: Props) {
       enableSorting: false,
     },
 
-    // ❌ NOT SORTABLE
+    // NOT SORTABLE
     {
       id: "action",
-      header: () => (
-        <div className="flex justify-center">Action</div>
-      ),
+      header: () => <div className="flex justify-center">Action</div>,
       cell: ({ row }) => (
         <div className="flex justify-center">
           <Button
@@ -168,7 +161,21 @@ export function IdValidationTable({ requests, onUpdate }: Props) {
 
   return (
     <>
-      <DataTable columns={columns} data={requests} />
+      <DataTable
+        columns={columns}
+        data={requests}
+        hasMore={hasMore}
+        lastRequestId={lastRequestId}
+        onPageChange={onPageChange}
+        pageSize={pageSize}
+        onPageSizeChange={onPageSizeChange}
+        statusFilter={statusFilter}
+        onStatusFilterChange={onStatusFilterChange}
+        sortBy={sortBy}
+        sortOrder={sortOrder}
+        onSortChange={onSortChange}
+        loading={loading}
+      />
 
       <IdValidationDialog
         open={open}
