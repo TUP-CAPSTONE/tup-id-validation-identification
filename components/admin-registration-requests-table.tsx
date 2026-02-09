@@ -1,12 +1,12 @@
 "use client"
 
 import { useState } from "react"
-import { Eye, Loader2 } from "lucide-react"
+import { Eye } from "lucide-react"
 import { ColumnDef } from "@tanstack/react-table"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import { DataTable } from "@/components/osa-data-table"
+import { AdminDataTable } from "@/components/admin-data-table"
 import { ReviewRegistrationDialog } from "@/components/admin-review-registration-dialog"
 import { RegistrationRequest } from "@/components/admin-manage-registration-requests"
 
@@ -14,12 +14,26 @@ interface Props {
   requests: RegistrationRequest[]
   loading: boolean
   onRequestsChanged: () => void
+  hasMore: boolean
+  lastRequestId: string | null
+  onPageChange: (cursor: string | null) => void
+  pageSize: number
+  onPageSizeChange: (size: number) => void
+  statusFilter?: string
+  onStatusFilterChange: (status: string | undefined) => void
 }
 
 export function RegistrationRequestsTable({
   requests,
   loading,
   onRequestsChanged,
+  hasMore,
+  lastRequestId,
+  onPageChange,
+  pageSize,
+  onPageSizeChange,
+  statusFilter,
+  onStatusFilterChange,
 }: Props) {
   const [selected, setSelected] = useState<RegistrationRequest | null>(null)
 
@@ -84,27 +98,20 @@ export function RegistrationRequestsTable({
     },
   ]
 
-  /* ---------- loading state ---------- */
-  if (loading) {
-    return (
-      <div className="flex items-center justify-center py-12">
-        <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-      </div>
-    )
-  }
-
-  /* ---------- empty state ---------- */
-  if (!requests.length) {
-    return (
-      <div className="flex items-center justify-center py-12 text-muted-foreground">
-        No registration requests found
-      </div>
-    )
-  }
-
   return (
     <>
-      <DataTable columns={columns} data={requests} />
+      <AdminDataTable
+        columns={columns}
+        data={requests}
+        hasMore={hasMore}
+        lastRequestId={lastRequestId}
+        onPageChange={onPageChange}
+        pageSize={pageSize}
+        onPageSizeChange={onPageSizeChange}
+        statusFilter={statusFilter}
+        onStatusFilterChange={onStatusFilterChange}
+        loading={loading}
+      />
 
       {selected && (
         <ReviewRegistrationDialog

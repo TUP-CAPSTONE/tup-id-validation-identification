@@ -135,9 +135,6 @@ export async function POST(req: Request) {
       processedAt: now,
     })
 
-    // delete original request
-    batch.delete(requestRef)
-
     await batch.commit()
 
     return NextResponse.json({ success: true })

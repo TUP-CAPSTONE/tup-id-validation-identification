@@ -162,8 +162,8 @@ export async function POST(req: Request) {
     })
 
     batch.update(requestRef, {
-      status: "Accepted",
-      remarks: "Accepted",
+      status: "accepted",
+      remarks: "accepted",
       reviewedBy: adminName,
       processedAt: now,
     })

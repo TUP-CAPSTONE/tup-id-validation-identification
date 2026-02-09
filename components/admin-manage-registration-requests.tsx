@@ -1,8 +1,7 @@
 "use client"
 
 import { useEffect, useState } from "react"
-import { collection, getDocs } from "firebase/firestore"
-import { db } from "@/lib/firebaseConfig"
+import { toast } from "sonner"
 import { RegistrationRequestsTable } from "@/components/admin-registration-requests-table"
 
 export interface RegistrationRequest {
@@ -17,71 +16,77 @@ export interface RegistrationRequest {
   guardianPhone: string
   uid: string
   requestedAt: any
+  requestedAtISO?: string
   status: "Pending" | "Accepted" | "Rejected"
   remarks?: string | null
   reviewedBy?: string | null
 }
 
+interface RegistrationResponse {
+  requests: RegistrationRequest[]
+  hasMore: boolean
+  lastRequestId: string | null
+  totalFetched: number
+}
+
 export function ManageRegistrationRequests() {
   const [requests, setRequests] = useState<RegistrationRequest[]>([])
   const [loading, setLoading] = useState(true)
+  const [hasMore, setHasMore] = useState(false)
+  const [lastRequestId, setLastRequestId] = useState<string | null>(null)
+  const [pageSize, setPageSize] = useState(10)
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
 
-  const fetchRequests = async () => {
-    setLoading(true)
-
+  const fetchRequests = async (
+    cursor: string | null = null,
+    newPageSize: number = pageSize,
+    newStatus?: string
+  ) => {
     try {
-      const snap = await getDocs(
-        collection(db, "registration_requests")
-      )
+      setLoading(true)
 
-      const data: RegistrationRequest[] = snap.docs.map((doc) => {
-        const d = doc.data()
-
-        const name = d.name || `${d.firstName || ""} ${d.lastName || ""}`.trim()
-        const status =
-          d.status === "pending"
-            ? "Pending"
-            : d.status === "accepted"
-            ? "Accepted"
-            : d.status === "rejected"
-            ? "Rejected"
-            : d.status
-
-        return {
-          id: doc.id,
-          name,
-          fullName: name,
-          studentNumber: d.tup_id || d.studentNumber || doc.id,
-          email: d.student_email || d.email || "",
-          phone: d.student_phone_num || d.phone || "",
-          guardianEmail: d.guardian_email || d.guardianEmail || "",
-          guardianPhone: d.guardian_phone_number || d.guardianPhone || "",
-          bday: d.bday || d.birthDate,
-          uid: d.uid || "",
-          requestedAt: d.createdAt || d.requestedAt,
-          status,
-          remarks: d.remarks || null,
-          reviewedBy: d.reviewedBy || null,
-        }
-      }) as RegistrationRequest[]
-
-      data.sort((a, b) => {
-        const aTime = a.requestedAt?.seconds
-          ? a.requestedAt.seconds * 1000
-          : a.requestedAt?.toMillis
-          ? a.requestedAt.toMillis()
-          : 0
-        const bTime = b.requestedAt?.seconds
-          ? b.requestedAt.seconds * 1000
-          : b.requestedAt?.toMillis
-          ? b.requestedAt.toMillis()
-          : 0
-        return bTime - aTime
+      const params = new URLSearchParams({
+        pageSize: newPageSize.toString(),
       })
 
-      setRequests(data)
+      if (cursor) {
+        params.append("lastRequestId", cursor)
+      }
+
+      if (newStatus) {
+        params.append("status", newStatus)
+      }
+
+      const response = await fetch(`/api/admin/registration-requests?${params.toString()}`)
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          const data = await response.json()
+          toast.error("Rate limit exceeded", {
+            description: data.error || "Too many requests. Please try again later.",
+          })
+          return
+        }
+
+        const errorText = await response.text()
+        console.error("API Error Response:", errorText)
+        console.error("Status:", response.status)
+
+        toast.error("Error", {
+          description: `Failed to fetch registration requests (Status: ${response.status})`,
+        })
+        return
+      }
+
+      const data: RegistrationResponse = await response.json()
+      setRequests(data.requests)
+      setHasMore(data.hasMore)
+      setLastRequestId(data.lastRequestId)
     } catch (error) {
       console.error("Error fetching requests:", error)
+      toast.error("Error", {
+        description: "Failed to load registration requests. Please try again.",
+      })
     } finally {
       setLoading(false)
     }
@@ -91,11 +96,37 @@ export function ManageRegistrationRequests() {
     fetchRequests()
   }, [])
 
+  const handlePageChange = (cursor: string | null) => {
+    fetchRequests(cursor, pageSize, statusFilter)
+  }
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize)
+    fetchRequests(null, newSize, statusFilter)
+  }
+
+  const handleStatusFilterChange = (newStatus: string | undefined) => {
+    setStatusFilter(newStatus)
+    fetchRequests(null, pageSize, newStatus)
+  }
+
+  const handleUpdate = () => {
+    // Refresh the current page
+    fetchRequests(null, pageSize, statusFilter)
+  }
+
   return (
     <RegistrationRequestsTable
       requests={requests}
       loading={loading}
-      onRequestsChanged={fetchRequests}
+      onRequestsChanged={handleUpdate}
+      hasMore={hasMore}
+      lastRequestId={lastRequestId}
+      onPageChange={handlePageChange}
+      pageSize={pageSize}
+      onPageSizeChange={handlePageSizeChange}
+      statusFilter={statusFilter}
+      onStatusFilterChange={handleStatusFilterChange}
     />
   )
 }
