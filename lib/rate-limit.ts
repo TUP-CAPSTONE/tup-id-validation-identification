@@ -64,6 +64,14 @@ export const rateLimiters = {
     analytics: true,
     prefix: "ratelimit:student:validation:submit",
   }),
+
+  // OSA login - 5 per minute (prevents brute force attacks)
+  osaLogin: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(5, "1 m"),
+    analytics: true,
+    prefix: "ratelimit:osa:login",
+  }),
 }
 
 // Helper function to check rate limit and return standardized response
