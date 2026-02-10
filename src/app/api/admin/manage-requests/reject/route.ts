@@ -128,7 +128,8 @@ export async function POST(req: Request) {
     })
 
     // (optional audit: store rejected copy before delete)
-    batch.set(adminDB.collection("rejected_requests").doc(requestId), {
+    batch.set(adminDB.collection("rejected_requests").doc(), {
+      originalRequestId: requestId,
       ...data,
       status: "Rejected",
       remarks,

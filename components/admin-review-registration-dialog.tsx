@@ -77,7 +77,7 @@ export function ReviewRegistrationDialog({
   return (
     <>
       <Dialog open={open} onOpenChange={onOpenChange}>
-        <DialogContent className="max-w-xl">
+        <DialogContent className="w-full max-w-4xl sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle className="flex items-center justify-between pr-8 text-xl font-bold">
               Review Registration Request
