@@ -4,8 +4,7 @@ import { getStorage } from "firebase-admin/storage";
 import { rateLimiters, checkRateLimit, createRateLimitHeaders } from "@/lib/rate-limit";
 import { FieldValue } from "firebase-admin/firestore";
 
-// CRITICAL: Your actual bucket name from gs://tup-id-verification.firebasestorage.app
-const STORAGE_BUCKET = 'tup-id-verification.firebasestorage.app';
+const STORAGE_BUCKET = process.env.NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET || 'default-bucket-name';
 
 // Helper: Convert base64 to Buffer
 function base64ToBuffer(base64String: string): Buffer {
@@ -70,17 +69,20 @@ async function uploadBase64Image(
     
     // Determine file extension
     const extension = mimeType.includes('png') ? 'png' : 'jpg';
-    const fileName = `${studentNumber}_${imageName}.${extension}`;
+    // ⭐ Add timestamp to filename for uniqueness
+    const timestamp = Date.now();
+    const fileName = `${studentNumber}_${imageName}_${timestamp}.${extension}`;
     const filePath = `ID_Validation_Files/${studentNumber}/${fileName}`;
     
     const file = bucket.file(filePath);
     
     console.log(`📤 Uploading ${imageName} to gs://${STORAGE_BUCKET}/${filePath}`);
     
-    // Upload file with public access
+    // Upload file with public access and cache control
     await file.save(buffer, {
       metadata: {
         contentType: mimeType,
+        cacheControl: 'public, max-age=300, must-revalidate', // ⭐ Cache for only 5 minutes
         metadata: {
           firebaseStorageDownloadTokens: Date.now().toString(),
         }
@@ -91,8 +93,8 @@ async function uploadBase64Image(
     // Make file publicly accessible
     await file.makePublic();
 
-    // Generate public URL
-    const publicUrl = `https://storage.googleapis.com/${STORAGE_BUCKET}/${filePath}`;
+    // Generate public URL with cache-busting parameter
+    const publicUrl = `https://storage.googleapis.com/${STORAGE_BUCKET}/${filePath}?t=${timestamp}`;
     console.log(`✅ Successfully uploaded ${imageName}: ${publicUrl}`);
     
     return publicUrl;
@@ -242,6 +244,7 @@ export async function POST(request: NextRequest) {
     const bucket = storage.bucket(STORAGE_BUCKET);
     
     let corUrl: string;
+    const timestamp = Date.now();
     
     // Check if corFile is base64 or already a URL
     if (corFile.startsWith('http://') || corFile.startsWith('https://')) {
@@ -253,7 +256,8 @@ export async function POST(request: NextRequest) {
         const corBuffer = base64ToBuffer(corFile);
         const corMimeType = extractMimeType(corFile);
         const corExtension = corMimeType === 'application/pdf' ? 'pdf' : 'jpg';
-        const corPath = `ID_Validation_Files/${studentNumber}/${studentNumber}_cor.${corExtension}`;
+        // ⭐ Add timestamp to COR filename
+        const corPath = `ID_Validation_Files/${studentNumber}/${studentNumber}_cor_${timestamp}.${corExtension}`;
         
         console.log(`COR details:`, {
           bufferSize: `${corBuffer.length} bytes`,
@@ -265,6 +269,7 @@ export async function POST(request: NextRequest) {
         await corFileRef.save(corBuffer, {
           metadata: { 
             contentType: corMimeType,
+            cacheControl: 'public, max-age=300, must-revalidate', // ⭐ Cache for only 5 minutes
             metadata: {
               firebaseStorageDownloadTokens: Date.now().toString(),
             }
@@ -274,7 +279,8 @@ export async function POST(request: NextRequest) {
         
         await corFileRef.makePublic();
         
-        corUrl = `https://storage.googleapis.com/${STORAGE_BUCKET}/${corPath}`;
+        // ⭐ Add cache-busting parameter
+        corUrl = `https://storage.googleapis.com/${STORAGE_BUCKET}/${corPath}?t=${timestamp}`;
         console.log(`✅ COR uploaded: ${corUrl}`);
       } catch (error: any) {
         console.error('❌ COR upload failed:', error);

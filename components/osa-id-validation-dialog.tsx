@@ -303,6 +303,7 @@ function Info({ label, value }: { label: string; value: string }) {
   )
 }
 
+// ⭐ UPDATED ImageBox with cache-busting and error handling
 function ImageBox({
   label,
   src,
@@ -312,14 +313,37 @@ function ImageBox({
   src: string
   onClick: (src: string, title: string) => void
 }) {
+  const [imageError, setImageError] = useState(false)
+  
+  // Add cache-busting if URL doesn't already have query params
+  const srcWithCacheBust = src.includes('?t=') ? src : `${src}${src.includes('?') ? '&' : '?'}t=${Date.now()}`
+  
   return (
     <div className="space-y-1 text-center group">
       <p className="text-[10px] font-bold uppercase truncate">{label}</p>
       <div
-        className="relative aspect-square w-full rounded-md overflow-hidden cursor-pointer border-2 border-transparent group-hover:border-primary"
-        onClick={() => onClick(src, label)}
+        className={`relative aspect-square w-full rounded-md overflow-hidden border-2 border-transparent ${
+          !imageError ? "cursor-pointer group-hover:border-primary" : "cursor-default"
+        }`}
+        onClick={() => !imageError && onClick(srcWithCacheBust, label)}
       >
-        <Image src={src} alt={label} fill priority className="object-cover" />
+        {imageError ? (
+          <div className="flex flex-col items-center justify-center h-full bg-muted">
+            <p className="text-[10px] text-muted-foreground text-center px-1">
+              Image not available
+            </p>
+          </div>
+        ) : (
+          <Image 
+            src={srcWithCacheBust}
+            alt={label} 
+            fill 
+            priority 
+            className="object-cover"
+            onError={() => setImageError(true)}
+            unoptimized
+          />
+        )}
       </div>
     </div>
   )

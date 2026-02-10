@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFirestore, collection, query, orderBy, limit, startAfter, getDocs, getDoc, doc, where } from "firebase/firestore";
+import { getFirestore, collection, query, orderBy, limit, startAfter, getDocs, getDoc, doc, where, Timestamp } from "firebase/firestore";
 import { app } from "@/lib/firebaseConfig";
 import { rateLimiters, checkRateLimit, createRateLimitHeaders } from "@/lib/rate-limit";
 
@@ -52,12 +52,19 @@ export async function GET(request: NextRequest) {
     // Start building query constraints
     const queryConstraints: any[] = [];
 
+    // ⭐ MIGRATION DATE FILTER - Only show requests after bucket migration
+    // Change this date to when you migrated to the new storage bucket
+    const migrationDate = new Date("2025-02-08"); // ADJUST THIS DATE
+    const migrationTimestamp = Timestamp.fromDate(migrationDate);
+    
+    // Always filter by migration date to exclude requests with missing images
+    queryConstraints.push(where("requestTime", ">=", migrationTimestamp));
+
     // IMPORTANT: Firebase requires composite indexes when combining where() + orderBy()
     // To avoid creating many indexes, we'll fetch more data and filter client-side when status filter is active
     
     if (statusFilter && ["pending", "accepted", "rejected"].includes(statusFilter)) {
-      // When filtering by status, fetch by status only (no ordering in Firestore)
-      // We'll sort the results in-memory after fetching
+      // When filtering by status, add status filter
       queryConstraints.push(where("status", "==", statusFilter));
       queryConstraints.push(limit(pageSize * 3)); // Fetch more to account for sorting
     } else {
