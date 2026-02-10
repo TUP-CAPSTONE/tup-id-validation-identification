@@ -7,7 +7,7 @@ import { Button } from "@/components/ui/button";
 import WebcamCapture from '@/components/webcam-capture';
 import { auth } from "@/lib/firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, Clock, AlertCircle } from "lucide-react";
 
 export default function StudentValidationRequest() {
   const router = useRouter();
@@ -17,6 +17,18 @@ export default function StudentValidationRequest() {
   const [existingRequest, setExistingRequest] = useState<any>(null);
   const [loading, setLoading] = useState(true);
   const [showResubmitForm, setShowResubmitForm] = useState(false);
+  
+  // Validation Period State
+  const [validationPeriod, setValidationPeriod] = useState<{
+    isActive: boolean;
+    message?: string;
+    startDate?: string;
+    endDate?: string;
+  }>({
+    isActive: false,
+    message: "Checking validation period...",
+  });
+  const [periodLoading, setPeriodLoading] = useState(true);
   
   const [corFile, setCorFile] = useState<File | null>(null);
   const [corFileBase64, setCorFileBase64] = useState<string | null>(null);
@@ -105,6 +117,32 @@ export default function StudentValidationRequest() {
   };
 
   /**
+   * Check validation period status
+   */
+  const checkValidationPeriod = async () => {
+    try {
+      const response = await fetch('/api/admin/validation-period');
+      if (response.ok) {
+        const data = await response.json();
+        setValidationPeriod(data);
+      } else {
+        setValidationPeriod({
+          isActive: false,
+          message: "Unable to check validation period status. Please try again later.",
+        });
+      }
+    } catch (err) {
+      console.error('Error checking validation period:', err);
+      setValidationPeriod({
+        isActive: false,
+        message: "Unable to check validation period status. Please try again later.",
+      });
+    } finally {
+      setPeriodLoading(false);
+    }
+  };
+
+  /**
    * Fetch data from API endpoints
    */
   const fetchData = async (token: string, uid: string) => {
@@ -146,6 +184,9 @@ export default function StudentValidationRequest() {
   };
 
   useEffect(() => {
+    // Check validation period on mount
+    checkValidationPeriod();
+
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         setLoading(false);
@@ -215,6 +256,12 @@ export default function StudentValidationRequest() {
   const handleSubmit = async () => {
     if (!currentUser || !idToken) {
       setError('You must be logged in');
+      return;
+    }
+
+    // Check validation period before submitting
+    if (!validationPeriod.isActive) {
+      setError('Validation period is not currently active. Please check the period status above.');
       return;
     }
 
@@ -310,7 +357,7 @@ export default function StudentValidationRequest() {
     router.push('/clients/students/dashboard');
   };
 
-  if (loading) {
+  if (loading || periodLoading) {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-center">
@@ -329,6 +376,102 @@ export default function StudentValidationRequest() {
             <CardTitle className="text-red-700">Authentication Required</CardTitle>
             <CardDescription>Please log in to access this page.</CardDescription>
           </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  // Show validation period message if not active (and no existing request or success)
+  if (!validationPeriod.isActive && !existingRequest && !success) {
+    const now = new Date();
+    const startDate = validationPeriod.startDate ? new Date(validationPeriod.startDate) : null;
+    const endDate = validationPeriod.endDate ? new Date(validationPeriod.endDate) : null;
+    
+    let statusType: "upcoming" | "ended" | "not-set" = "not-set";
+    
+    if (startDate && now < startDate) {
+      statusType = "upcoming";
+    } else if (endDate && now > endDate) {
+      statusType = "ended";
+    }
+
+    return (
+      <div className="w-full max-w-6xl space-y-6">
+        <Button 
+          variant="outline" 
+          onClick={goBackToDashboard}
+          className="flex items-center gap-2 border-red-200 hover:bg-red-50"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Dashboard
+        </Button>
+
+        <Card className={`${
+          statusType === "upcoming" ? "border-blue-200" : 
+          statusType === "ended" ? "border-amber-200" : 
+          "border-gray-200"
+        }`}>
+          <CardHeader>
+            <CardTitle className={`flex items-center gap-2 ${
+              statusType === "upcoming" ? "text-blue-700" : 
+              statusType === "ended" ? "text-amber-700" : 
+              "text-gray-700"
+            }`}>
+              {statusType === "upcoming" && <Clock className="h-5 w-5" />}
+              {statusType === "ended" && <AlertCircle className="h-5 w-5" />}
+              {statusType === "not-set" && <AlertCircle className="h-5 w-5" />}
+              ID Validation {statusType === "upcoming" ? "Coming Soon" : statusType === "ended" ? "Closed" : "Unavailable"}
+            </CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className={`p-4 rounded-lg border ${
+              statusType === "upcoming" 
+                ? "bg-blue-50 border-blue-200" 
+                : statusType === "ended"
+                ? "bg-amber-50 border-amber-200"
+                : "bg-gray-50 border-gray-200"
+            }`}>
+              <p className={`${
+                statusType === "upcoming" 
+                  ? "text-blue-800" 
+                  : statusType === "ended"
+                  ? "text-amber-800"
+                  : "text-gray-800"
+              }`}>
+                {validationPeriod.message}
+              </p>
+              
+              {startDate && statusType === "upcoming" && (
+                <div className="mt-4 pt-4 border-t border-blue-200">
+                  <p className="text-sm text-blue-700">
+                    <strong>Opens on:</strong> {startDate.toLocaleString('en-US', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                </div>
+              )}
+
+              {endDate && statusType === "ended" && (
+                <div className="mt-4 pt-4 border-t border-amber-200">
+                  <p className="text-sm text-amber-700">
+                    <strong>Ended on:</strong> {endDate.toLocaleString('en-US', {
+                      weekday: 'long',
+                      year: 'numeric',
+                      month: 'long',
+                      day: 'numeric',
+                      hour: 'numeric',
+                      minute: '2-digit',
+                    })}
+                  </p>
+                </div>
+              )}
+            </div>
+          </CardContent>
         </Card>
       </div>
     );
@@ -377,12 +520,24 @@ export default function StudentValidationRequest() {
                 <p className="text-red-700">{existingRequest.rejectRemarks}</p>
               </div>
               
-              <Button
-                onClick={() => setShowResubmitForm(true)}
-                className="mt-4 w-full bg-[#b32032] hover:bg-[#8b1828]"
-              >
-                Submit New Request
-              </Button>
+              {/* Only show resubmit button if validation period is active */}
+              {validationPeriod.isActive ? (
+                <Button
+                  onClick={() => setShowResubmitForm(true)}
+                  className="mt-4 w-full bg-[#b32032] hover:bg-[#8b1828]"
+                >
+                  Submit New Request
+                </Button>
+              ) : (
+                <div className="mt-4 p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-amber-800 text-sm">
+                    ⚠️ Validation period is not currently active. You cannot submit a new request at this time.
+                  </p>
+                  <p className="text-amber-700 text-sm mt-1">
+                    {validationPeriod.message}
+                  </p>
+                </div>
+              )}
             </CardContent>
           )}
 
@@ -438,6 +593,23 @@ export default function StudentValidationRequest() {
         <ArrowLeft className="w-4 h-4" />
         Back to Dashboard
       </Button>
+
+      {/* Validation Period Status Banner */}
+      {validationPeriod.isActive && (
+        <Card className="border-green-200 bg-green-50">
+          <CardContent className="pt-6">
+            <div className="flex items-center gap-3">
+              <div className="flex-shrink-0">
+                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
+              </div>
+              <div>
+                <p className="font-semibold text-green-800">Validation Period Active</p>
+                <p className="text-sm text-green-700">{validationPeriod.message}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      )}
 
       {error && (
         <Card className="border-red-200 bg-red-50">
@@ -740,14 +912,16 @@ export default function StudentValidationRequest() {
           
           <Button
             onClick={handleSubmit}
-            disabled={!allCaptured || submitting}
+            disabled={!allCaptured || submitting || !validationPeriod.isActive}
             className={`w-full py-6 text-lg ${
-              allCaptured && !submitting
+              allCaptured && !submitting && validationPeriod.isActive
                 ? 'bg-[#b32032] hover:bg-[#8b1828]'
                 : 'bg-gray-300'
             }`}
           >
-            {submitting ? 'Submitting...' : 'Submit Validation Request'}
+            {submitting ? 'Submitting...' : 
+             !validationPeriod.isActive ? 'Validation Period Inactive' :
+             'Submit Validation Request'}
           </Button>
         </CardContent>
       </Card>

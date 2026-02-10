@@ -12,6 +12,7 @@ import {
   LogIn,
   MessageSquare,
   LayoutDashboard,
+  Settings,
 } from "lucide-react"
 
 import { AdminNavUser } from "@/components/admin-nav-user";
@@ -158,6 +159,26 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>
+
+          <SidebarSeparator className="mx-0 my-3" />
+
+          {/* System Settings */}
+          <SidebarMenuItem>
+            <Link href="/clients/admin/dashboard/settings">
+              <SidebarMenuButton
+                className={cn(
+                  "rounded-md transition-colors h-12",
+                  pathname.includes("settings") 
+                    ? "bg-blue-100 text-blue-900 hover:bg-blue-200" 
+                    : "text-gray-700 hover:bg-gray-100"
+                )}
+              >
+                <Settings className="w-5 h-5" />
+                <span className="font-medium text-base">System Settings</span>
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+         
           
         </SidebarMenu>
       </SidebarContent>
