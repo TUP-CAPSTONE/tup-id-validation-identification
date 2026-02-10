@@ -49,3 +49,14 @@ export interface StudentProfileResponse {
   data?: StudentProfile;
   error?: string;
 }
+
+export interface Student {
+  uid: string
+  tupId: string
+  fullName: string
+  email: string
+  role: "student"
+  accountStatus: "active" | "disabled"
+  createdAt?: any
+  updatedAt?: any
+}

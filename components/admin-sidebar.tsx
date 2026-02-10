@@ -8,7 +8,7 @@ import {
   Users,
   CheckCircle,
   Building2,
-  Key,
+  User2Icon,
   LogIn,
   MessageSquare,
   LayoutDashboard,
@@ -109,33 +109,17 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
           </SidebarMenuItem>
 
           <SidebarMenuItem>
-            <Link href="/clients/admin/dashboard/manage-osa-accounts">
+            <Link href="/clients/admin/dashboard/manage-student-accounts">
               <SidebarMenuButton
                 className={cn(
                   "rounded-md transition-colors h-12",
-                  pathname.includes("manage-osa-accounts") 
+                  pathname.includes("manage-student-accounts") 
                     ? "bg-blue-100 text-blue-900 hover:bg-blue-200" 
                     : "text-gray-700 hover:bg-gray-100"
                 )}
               >
-                <Building2 className="w-5 h-5" />
-                <span className="font-medium text-base">Manage OSA Accounts</span>
-              </SidebarMenuButton>
-            </Link>
-          </SidebarMenuItem>
-
-          <SidebarMenuItem>
-            <Link href="/clients/admin/manage-gate-accounts">
-              <SidebarMenuButton
-                className={cn(
-                  "rounded-md transition-colors h-12",
-                  pathname.includes("manage-gate-accounts") 
-                    ? "bg-blue-100 text-blue-900 hover:bg-blue-200" 
-                    : "text-gray-700 hover:bg-gray-100"
-                )}
-              >
-                <Key className="w-5 h-5" />
-                <span className="font-medium text-base">Manage Gate Accounts</span>
+                <User2Icon className="w-5 h-5" />
+                <span className="font-medium text-base">Manage Student Accounts</span>
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>
