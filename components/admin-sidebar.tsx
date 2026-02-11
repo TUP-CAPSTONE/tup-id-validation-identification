@@ -76,7 +76,7 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
           </SidebarMenuItem>
 
           <SidebarMenuItem>
-            <Link href="/clients/admin/manage-id-validation">
+            <Link href="/clients/admin/dashboard/manage-id-validation">
               <SidebarMenuButton
                 className={cn(
                   "rounded-md transition-colors h-12",
