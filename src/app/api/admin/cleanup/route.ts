@@ -1,14 +1,18 @@
 import { NextRequest, NextResponse } from "next/server"
 import { adminAuth, adminDB } from "@/lib/firebaseAdmin"
 import { cookies } from "next/headers"
+import { Timestamp } from "firebase-admin/firestore"
 
 /**
  * POST /api/admin/cleanup
- * Delete ID validation records outside the current validation period
+ * 
+ * Deletes ID validation records outside the current validation period.
  */
 export async function POST(req: NextRequest) {
   try {
-    // Verify admin authentication
+    // ==============================
+    // Verify Admin Authentication
+    // ==============================
     const cookieStore = await cookies()
     const sessionCookie = cookieStore.get("admin_session")?.value
 
@@ -17,9 +21,10 @@ export async function POST(req: NextRequest) {
     }
 
     const decodedToken = await adminAuth.verifySessionCookie(sessionCookie, true)
-    
-    // Check if user is admin (via custom claims or Firestore)
+
+    // Check if user is admin
     let isAdmin = false
+
     if (decodedToken.role === "admin") {
       isAdmin = true
     } else {
@@ -33,9 +38,13 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
+    console.log("========================================")
     console.log("Starting cleanup process...")
+    console.log("========================================")
 
-    // Get validation period settings
+    // ==============================
+    // Get Validation Period Settings
+    // ==============================
     const settingsRef = adminDB.collection("system_settings").doc("idValidation")
     const settingsDoc = await settingsRef.get()
 
@@ -57,49 +66,104 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    const startTimestamp = new Date(startDate)
-    const endTimestamp = new Date(endDate)
+    // ✅ Convert to Firestore Timestamps (FIXED)
+    const startTimestamp = Timestamp.fromDate(new Date(startDate))
+    const endTimestamp = Timestamp.fromDate(new Date(endDate))
 
-    console.log(`Cleaning records outside period: ${startDate} to ${endDate}`)
+    console.log(`Validation Period: ${startDate} to ${endDate}`)
+    console.log(`Will DELETE records BEFORE: ${startTimestamp.toDate().toISOString()}`)
+    console.log(`Will DELETE records AFTER: ${endTimestamp.toDate().toISOString()}`)
+    console.log(`Will KEEP records BETWEEN these dates`)
+    console.log("========================================")
 
-    // Query records outside the validation period
-    // Assuming ID validations have a 'createdAt' or 'submittedAt' field
     const idValidationsRef = adminDB.collection("validation_requests2")
-    
-    // Get records before start date
+
+    console.log("Querying validation_requests2 collection...")
+
+    // Get total count
+    const allRecordsSnapshot = await idValidationsRef.count().get()
+    const totalRecords = allRecordsSnapshot.data().count
+    console.log(`Total records in validation_requests2: ${totalRecords}`)
+
+    // ==============================
+    // Query BEFORE start date
+    // ==============================
+    console.log("Finding records created BEFORE start date...")
     const beforeStartQuery = idValidationsRef
-      .where("createdAt", "<", startTimestamp.toISOString())
+      .where("requestTime", "<", startTimestamp)
+
     const beforeStartSnapshot = await beforeStartQuery.get()
+    console.log(`Found ${beforeStartSnapshot.size} records BEFORE start date`)
 
-    // Get records after end date
+    // ==============================
+    // Query AFTER end date
+    // ==============================
+    console.log("Finding records created AFTER end date...")
     const afterEndQuery = idValidationsRef
-      .where("createdAt", ">", endTimestamp.toISOString())
+      .where("requestTime", ">", endTimestamp)
+
     const afterEndSnapshot = await afterEndQuery.get()
+    console.log(`Found ${afterEndSnapshot.size} records AFTER end date`)
 
+    // ==============================
+    // Batch Deletion
+    // ==============================
     let deletedCount = 0
-    const batch = adminDB.batch()
+    const batchSize = 500
+    let currentBatch = adminDB.batch()
+    let operationCount = 0
 
-    // Delete records before start date
-    beforeStartSnapshot.forEach((doc) => {
-      batch.delete(doc.ref)
+    console.log("========================================")
+    console.log("Starting deletion process...")
+
+    // Delete BEFORE start
+    console.log(`Deleting ${beforeStartSnapshot.size} records from BEFORE start date...`)
+    for (const doc of beforeStartSnapshot.docs) {
+      currentBatch.delete(doc.ref)
       deletedCount++
-    })
+      operationCount++
 
-    // Delete records after end date
-    afterEndSnapshot.forEach((doc) => {
-      batch.delete(doc.ref)
-      deletedCount++
-    })
-
-    // Commit the batch delete
-    if (deletedCount > 0) {
-      await batch.commit()
-      console.log(`Deleted ${deletedCount} records outside validation period`)
-    } else {
-      console.log("No records to delete")
+      if (operationCount >= batchSize) {
+        await currentBatch.commit()
+        console.log(`Committed batch: ${operationCount} deletions`)
+        currentBatch = adminDB.batch()
+        operationCount = 0
+      }
     }
 
-    // Log cleanup activity
+    // Delete AFTER end
+    console.log(`Deleting ${afterEndSnapshot.size} records from AFTER end date...`)
+    for (const doc of afterEndSnapshot.docs) {
+      currentBatch.delete(doc.ref)
+      deletedCount++
+      operationCount++
+
+      if (operationCount >= batchSize) {
+        await currentBatch.commit()
+        console.log(`Committed batch: ${operationCount} deletions`)
+        currentBatch = adminDB.batch()
+        operationCount = 0
+      }
+    }
+
+    // Commit remaining operations
+    if (operationCount > 0) {
+      await currentBatch.commit()
+      console.log(`Committed final batch: ${operationCount} deletions`)
+    }
+
+    const recordsKept = totalRecords - deletedCount
+
+    console.log("========================================")
+    console.log("CLEANUP SUMMARY:")
+    console.log(`Total records before: ${totalRecords}`)
+    console.log(`Records deleted: ${deletedCount}`)
+    console.log(`Records kept (within period): ${recordsKept}`)
+    console.log("========================================")
+
+    // ==============================
+    // Log Cleanup Activity
+    // ==============================
     const cleanupLogRef = adminDB.collection("system_settings").doc("cleanupLog")
     const currentLog = await cleanupLogRef.get()
     const existingHistory = currentLog.exists ? currentLog.data()?.history || [] : []
@@ -108,11 +172,15 @@ export async function POST(req: NextRequest) {
       lastCleanup: new Date().toISOString(),
       lastCleanupBy: decodedToken.uid,
       lastDeletedCount: deletedCount,
+      recordsKept: recordsKept,
+      totalRecordsBefore: totalRecords,
       history: [
-        ...existingHistory.slice(-9), // Keep last 10 entries
+        ...existingHistory.slice(-9),
         {
           timestamp: new Date().toISOString(),
           deletedCount,
+          recordsKept,
+          totalRecordsBefore: totalRecords,
           performedBy: decodedToken.uid,
           periodStart: startDate,
           periodEnd: endDate,
@@ -120,13 +188,21 @@ export async function POST(req: NextRequest) {
       ],
     })
 
+    console.log("Cleanup log updated in system_settings/cleanupLog")
+    console.log("Cleanup process completed successfully!")
+
     return NextResponse.json({
       success: true,
       deletedCount,
-      message: `Successfully deleted ${deletedCount} records outside the validation period`,
+      recordsKept,
+      totalRecordsBefore: totalRecords,
+      message: `Successfully deleted ${deletedCount} records outside the validation period. ${recordsKept} records kept within the period.`,
     })
   } catch (error) {
-    console.error("Error during cleanup:", error)
+    console.error("========================================")
+    console.error("ERROR during cleanup:", error)
+    console.error("========================================")
+
     return NextResponse.json(
       { error: "Internal server error" },
       { status: 500 }

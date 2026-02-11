@@ -136,7 +136,7 @@ export async function POST(req: Request) {
     // 🚀 Batch writes (fast)
     const batch = adminDB.batch()
 
-    batch.set(adminDB.collection("users").doc(studentDocId), {
+    batch.set(adminDB.collection("users").doc(), {
       uid: userRecord.uid,
       studentNumber: tupId,
       email: studentEmail,

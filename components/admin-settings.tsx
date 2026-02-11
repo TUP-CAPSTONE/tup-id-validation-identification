@@ -16,7 +16,8 @@ import {
   FieldLabel,
 } from "@/components/ui/field"
 import { Input } from "@/components/ui/input"
-import { Calendar, Download, Trash2, AlertCircle, CheckCircle2 } from "lucide-react"
+import { Calendar, Download, Trash2, AlertCircle, CheckCircle2, RefreshCw, Plus } from "lucide-react"
+import { ConfirmationDialog } from "@/components/confirmation-dialog"
 
 interface ValidationPeriod {
   startDate: string
@@ -45,10 +46,20 @@ export function AdminSettings() {
   const [saving, setSaving] = useState(false)
   const [backing, setBacking] = useState(false)
   const [cleaning, setCleaning] = useState(false)
+  const [extending, setExtending] = useState(false)
+  const [startingNewSemester, setStartingNewSemester] = useState(false)
   const [message, setMessage] = useState<{
     type: "success" | "error"
     text: string
   } | null>(null)
+
+  // Dialog states
+  const [showCleanupDialog, setShowCleanupDialog] = useState(false)
+  const [showNewSemesterDialog, setShowNewSemesterDialog] = useState(false)
+  const [showSavePeriodDialog, setShowSavePeriodDialog] = useState(false)
+
+  // Extension settings
+  const [extensionDays, setExtensionDays] = useState<number>(7)
 
   // Load current settings
   useEffect(() => {
@@ -71,23 +82,42 @@ export function AdminSettings() {
     }
   }
 
-  const handleSavePeriod = async () => {
+  const handleSavePeriod = async (skipDialog = false) => {
+    // Validate dates
+    if (validationPeriod.startDate && validationPeriod.endDate) {
+      const start = new Date(validationPeriod.startDate)
+      const end = new Date(validationPeriod.endDate)
+      
+      if (end < start) {
+        showMessage("error", "End date must be after start date")
+        return
+      }
+    }
+
+    // Check if there's already a saved period by fetching current data
+    if (!skipDialog) {
+      try {
+        const response = await fetch("/api/admin/settings")
+        if (response.ok) {
+          const data = await response.json()
+          const hasSavedPeriod = data.validationPeriod.startDate !== "" || data.validationPeriod.endDate !== ""
+          
+          if (hasSavedPeriod) {
+            // Show confirmation dialog
+            setShowSavePeriodDialog(true)
+            return
+          }
+        }
+      } catch (error) {
+        console.error("Error checking existing period:", error)
+      }
+    }
+
+    // Proceed with saving
     setSaving(true)
     setMessage(null)
 
     try {
-      // Validate dates
-      if (validationPeriod.startDate && validationPeriod.endDate) {
-        const start = new Date(validationPeriod.startDate)
-        const end = new Date(validationPeriod.endDate)
-        
-        if (end < start) {
-          showMessage("error", "End date must be after start date")
-          setSaving(false)
-          return
-        }
-      }
-
       const response = await fetch("/api/admin/settings", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
@@ -98,11 +128,89 @@ export function AdminSettings() {
 
       showMessage("success", "ID validation period updated successfully")
       await loadSettings() // Reload to get updated isActive status
+      setShowSavePeriodDialog(false)
     } catch (error) {
       console.error("Error saving period:", error)
       showMessage("error", "Failed to save settings")
     } finally {
       setSaving(false)
+    }
+  }
+
+  const confirmSavePeriod = () => {
+    setShowSavePeriodDialog(false)
+    handleSavePeriod(true) // Skip dialog check on confirmation
+  }
+
+  const handleExtendPeriod = async () => {
+    if (!validationPeriod.endDate) {
+      showMessage("error", "No current period to extend")
+      return
+    }
+
+    if (extensionDays < 1 || extensionDays > 90) {
+      showMessage("error", "Extension must be between 1 and 90 days")
+      return
+    }
+
+    if (!confirm(
+      `Extend the validation period by ${extensionDays} days?\n\nThis will add ${extensionDays} days to the current end date.`
+    )) {
+      return
+    }
+
+    setExtending(true)
+    setMessage(null)
+
+    try {
+      const response = await fetch("/api/admin/extend-period", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ extensionDays }),
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to extend period")
+      }
+
+      const result = await response.json()
+      showMessage("success", `Period extended by ${extensionDays} days. New end date: ${new Date(result.newEndDate).toLocaleString()}`)
+      await loadSettings()
+    } catch (error: any) {
+      console.error("Error extending period:", error)
+      showMessage("error", error.message || "Failed to extend period")
+    } finally {
+      setExtending(false)
+    }
+  }
+
+  const handleStartNewSemester = async () => {
+    setShowNewSemesterDialog(false)
+    setStartingNewSemester(true)
+    setMessage(null)
+
+    try {
+      const response = await fetch("/api/admin/new-semester", {
+        method: "POST",
+      })
+
+      if (!response.ok) {
+        const error = await response.json()
+        throw new Error(error.error || "Failed to start new semester")
+      }
+
+      const result = await response.json()
+      showMessage(
+        "success",
+        `New semester started! ${result.resetCount} student profiles have been reset. Please set a new validation period.`
+      )
+      await loadSettings()
+    } catch (error: any) {
+      console.error("Error starting new semester:", error)
+      showMessage("error", error.message || "Failed to start new semester")
+    } finally {
+      setStartingNewSemester(false)
     }
   }
 
@@ -139,18 +247,7 @@ export function AdminSettings() {
   }
 
   const handleCleanData = async () => {
-    if (!confirm(
-      "⚠️ WARNING: This will permanently delete all ID validation records that are outside the current validation period. This action cannot be undone.\n\nMake sure you have a backup before proceeding!\n\nAre you sure you want to continue?"
-    )) {
-      return
-    }
-
-    if (!confirm(
-      "This is your final warning. All old data will be permanently deleted.\n\nClick OK to proceed with deletion."
-    )) {
-      return
-    }
-
+    setShowCleanupDialog(false)
     setCleaning(true)
     setMessage(null)
 
@@ -192,6 +289,7 @@ export function AdminSettings() {
   const now = new Date()
   const startDate = validationPeriod.startDate ? new Date(validationPeriod.startDate) : null
   const endDate = validationPeriod.endDate ? new Date(validationPeriod.endDate) : null
+  const hasPeriod = validationPeriod.startDate && validationPeriod.endDate
 
   return (
     <div className="space-y-6">
@@ -233,7 +331,7 @@ export function AdminSettings() {
           <form
             onSubmit={(e) => {
               e.preventDefault()
-              handleSavePeriod()
+              handleSavePeriod(false)
             }}
           >
             <FieldGroup>
@@ -328,6 +426,85 @@ export function AdminSettings() {
         </CardContent>
       </Card>
 
+      {/* Period Management Actions */}
+      {hasPeriod && (
+        <Card>
+          <CardHeader>
+            <div className="flex items-center gap-2">
+              <RefreshCw className="h-5 w-5" />
+              <CardTitle>Period Management</CardTitle>
+            </div>
+            <CardDescription>
+              Extend the current period or start a new semester
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <FieldGroup>
+              {/* Extend Period */}
+              <Field>
+                <FieldLabel>Extend Current Period</FieldLabel>
+                <FieldDescription>
+                  Add additional days to the current validation period without changing the start date.
+                </FieldDescription>
+                <div className="flex gap-3 items-end">
+                  <div className="flex-1 max-w-xs">
+                    <Input
+                      type="number"
+                      min="1"
+                      max="90"
+                      value={extensionDays}
+                      onChange={(e) => setExtensionDays(parseInt(e.target.value) || 7)}
+                      placeholder="Days to extend"
+                      className="w-full"
+                    />
+                    <p className="text-xs text-gray-500 mt-1">Enter number of days (1-90)</p>
+                  </div>
+                  <Button
+                    type="button"
+                    onClick={handleExtendPeriod}
+                    disabled={extending || !validationPeriod.endDate}
+                    variant="outline"
+                    className="border-blue-200 text-blue-700 hover:bg-blue-50"
+                  >
+                    <RefreshCw className="h-4 w-4 mr-2" />
+                    {extending ? "Extending..." : `Extend by ${extensionDays} Days`}
+                  </Button>
+                </div>
+                {validationPeriod.endDate && (
+                  <p className="text-sm text-blue-600 mt-2">
+                    New end date will be: {new Date(new Date(validationPeriod.endDate).getTime() + extensionDays * 24 * 60 * 60 * 1000).toLocaleString()}
+                  </p>
+                )}
+              </Field>
+
+              {/* Start New Semester */}
+              <Field>
+                <FieldLabel>Start New Semester</FieldLabel>
+                <FieldDescription>
+                  Reset all student validation statuses and clear the current period. Use this when starting a new academic term.
+                  <strong className="block mt-1 text-red-600">
+                    ⚠️ Warning: This will reset validation status for ALL students!
+                  </strong>
+                </FieldDescription>
+                <Button
+                  type="button"
+                  onClick={() => setShowNewSemesterDialog(true)}
+                  disabled={startingNewSemester}
+                  variant="outline"
+                  className="w-full md:w-auto border-purple-200 text-purple-700 hover:bg-purple-50"
+                >
+                  <Plus className="h-4 w-4 mr-2" />
+                  {startingNewSemester ? "Starting New Semester..." : "Start New Semester"}
+                </Button>
+                <p className="text-sm text-amber-600 mt-2">
+                  💡 Tip: Create a backup before starting a new semester
+                </p>
+              </Field>
+            </FieldGroup>
+          </CardContent>
+        </Card>
+      )}
+
       {/* Data Management */}
       <Card>
         <CardHeader>
@@ -398,7 +575,7 @@ export function AdminSettings() {
                 </FieldDescription>
                 <Button
                   type="button"
-                  onClick={handleCleanData}
+                  onClick={() => setShowCleanupDialog(true)}
                   disabled={cleaning || !validationPeriod.startDate || !validationPeriod.endDate}
                   variant="outline"
                   className="w-full md:w-auto border-red-200 text-red-700 hover:bg-red-50"
@@ -416,6 +593,128 @@ export function AdminSettings() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Cleanup Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={showCleanupDialog}
+        onClose={() => setShowCleanupDialog(false)}
+        onConfirm={handleCleanData}
+        isLoading={cleaning}
+        confirmText="Delete Old Records"
+        requiresTyping={true}
+        typingText="DELETE"
+        steps={[
+          {
+            title: "⚠️ Delete Old Validation Records",
+            description: "You are about to permanently delete ID validation records that fall outside the current validation period.",
+            type: "warning",
+            bullets: [
+              "All records created BEFORE the start date will be deleted",
+              "All records created AFTER the end date will be deleted",
+              "Records within the validation period will be kept",
+            ],
+            checklist: [
+              "I understand this action is permanent and cannot be undone",
+              "I have created a recent backup of the data",
+              "I have verified the current validation period dates are correct",
+            ],
+          },
+          {
+            title: "🔴 Final Confirmation Required",
+            description: "This is your last chance to cancel. Once confirmed, all old data will be permanently deleted from the database.",
+            type: "danger",
+            bullets: [
+              "Database records will be permanently removed",
+              "There is no way to recover deleted data without a backup",
+              "This operation may take a few moments to complete",
+            ],
+          },
+        ]}
+      />
+
+      {/* Save Period Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={showSavePeriodDialog}
+        onClose={() => setShowSavePeriodDialog(false)}
+        onConfirm={confirmSavePeriod}
+        isLoading={saving}
+        confirmText="Update Period Settings"
+        requiresTyping={false}
+        steps={[
+          {
+            title: "📅 Update Validation Period",
+            description: "You are about to change the existing validation period. This will affect when students can submit their ID validation requests.",
+            type: "warning",
+            bullets: [
+              `Current period: ${validationPeriod.startDate ? new Date(validationPeriod.startDate).toLocaleString() : 'Not set'} - ${validationPeriod.endDate ? new Date(validationPeriod.endDate).toLocaleString() : 'Not set'}`,
+              isPeriodActive 
+                ? "⚠️ The validation period is currently ACTIVE - students can submit requests right now"
+                : "The validation period is currently inactive",
+              "Changing the dates will immediately affect student access to validation submissions",
+            ],
+            checklist: [
+              "I have verified the new start and end dates are correct",
+              "I understand this will change when students can submit validation requests",
+              isPeriodActive 
+                ? "I understand students may currently be submitting requests during the active period"
+                : "I understand this may activate or deactivate the validation period",
+            ],
+          },
+        ]}
+      />
+
+      {/* New Semester Confirmation Dialog */}
+      <ConfirmationDialog
+        isOpen={showNewSemesterDialog}
+        onClose={() => setShowNewSemesterDialog(false)}
+        onConfirm={handleStartNewSemester}
+        isLoading={startingNewSemester}
+        confirmText="Start New Semester"
+        requiresTyping={true}
+        typingText="NEW SEMESTER"
+        steps={[
+          {
+            title: "📚 Start New Semester",
+            description: "Starting a new semester will reset the validation status for all students in the system.",
+            type: "info",
+            bullets: [
+              "All students will be marked as 'not validated'",
+              "Current validation period will be cleared",
+              "You will need to set a new validation period",
+              "Students will need to resubmit validation requests",
+            ],
+            checklist: [
+              "I understand ALL students will be affected by this action",
+              "I have created a backup of current data",
+              "I am ready to configure a new validation period",
+            ],
+          },
+          {
+            title: "⚠️ Confirm Mass Student Reset",
+            description: `This will reset validation status for approximately ${backupInfo.totalRecords.toLocaleString()} student records. This action affects every student in the system.`,
+            type: "warning",
+            bullets: [
+              "Every student profile will have 'isValidated' set to false",
+              "Students will see their validation as 'pending' or 'not started'",
+              "This operation is logged for audit purposes",
+            ],
+            checklist: [
+              "I have informed students about the new semester validation requirement",
+              "I understand this change is immediate and affects all users",
+            ],
+          },
+          {
+            title: "🔴 Final Confirmation - New Semester",
+            description: "This is the final step. After clicking confirm, all student validation statuses will be reset immediately.",
+            type: "danger",
+            bullets: [
+              "This action cannot be undone without restoring from backup",
+              "Students will need to go through validation process again",
+              "System will be ready for new semester immediately after",
+            ],
+          },
+        ]}
+      />
     </div>
   )
 }
