@@ -20,6 +20,39 @@ function extractMimeType(base64String: string): string {
   return match ? match[1] : 'image/jpeg';
 }
 
+// Helper: Delete old files for a student from Firebase Storage
+async function deleteOldFilesForStudent(studentNumber: string): Promise<void> {
+  try {
+    const storage = getStorage();
+    const bucket = storage.bucket(STORAGE_BUCKET);
+    const folderPath = `ID_Validation_Files/${studentNumber}/`;
+    
+    console.log(`🗑️ Deleting old files for student ${studentNumber}...`);
+    
+    const [files] = await bucket.getFiles({ prefix: folderPath });
+    
+    if (files.length === 0) {
+      console.log(`ℹ️ No old files found for student ${studentNumber}`);
+      return;
+    }
+    
+    console.log(`Found ${files.length} old files to delete`);
+    
+    // Delete all files in parallel
+    await Promise.all(
+      files.map(file => {
+        console.log(`  - Deleting: ${file.name}`);
+        return file.delete();
+      })
+    );
+    
+    console.log(`✅ Successfully deleted ${files.length} old files for student ${studentNumber}`);
+  } catch (error: any) {
+    console.error(`⚠️ Error deleting old files for student ${studentNumber}:`, error.message);
+    // Don't throw - continue with upload even if deletion fails
+  }
+}
+
 // Helper: Upload base64 image to Firebase Storage
 async function uploadBase64Image(
   base64Image: string,
@@ -69,20 +102,17 @@ async function uploadBase64Image(
     
     // Determine file extension
     const extension = mimeType.includes('png') ? 'png' : 'jpg';
-    // ⭐ Add timestamp to filename for uniqueness
-    const timestamp = Date.now();
-    const fileName = `${studentNumber}_${imageName}_${timestamp}.${extension}`;
+    const fileName = `${studentNumber}_${imageName}.${extension}`;
     const filePath = `ID_Validation_Files/${studentNumber}/${fileName}`;
     
     const file = bucket.file(filePath);
     
     console.log(`📤 Uploading ${imageName} to gs://${STORAGE_BUCKET}/${filePath}`);
     
-    // Upload file with public access and cache control
+    // Upload file with public access
     await file.save(buffer, {
       metadata: {
         contentType: mimeType,
-        cacheControl: 'public, max-age=300, must-revalidate', // ⭐ Cache for only 5 minutes
         metadata: {
           firebaseStorageDownloadTokens: Date.now().toString(),
         }
@@ -93,8 +123,8 @@ async function uploadBase64Image(
     // Make file publicly accessible
     await file.makePublic();
 
-    // Generate public URL with cache-busting parameter
-    const publicUrl = `https://storage.googleapis.com/${STORAGE_BUCKET}/${filePath}?t=${timestamp}`;
+    // Generate public URL
+    const publicUrl = `https://storage.googleapis.com/${STORAGE_BUCKET}/${filePath}`;
     console.log(`✅ Successfully uploaded ${imageName}: ${publicUrl}`);
     
     return publicUrl;
@@ -237,6 +267,9 @@ export async function POST(request: NextRequest) {
       console.log(`ℹ️ Found existing request for ${studentNumber} with status: ${existingRequest.status}`);
     }
 
+    // 🗑️ Delete old files before uploading new ones
+    await deleteOldFilesForStudent(studentNumber);
+
     console.log(`\n🚀 Starting file uploads for student ${studentNumber}...`);
 
     // Upload COR file
@@ -244,7 +277,6 @@ export async function POST(request: NextRequest) {
     const bucket = storage.bucket(STORAGE_BUCKET);
     
     let corUrl: string;
-    const timestamp = Date.now();
     
     // Check if corFile is base64 or already a URL
     if (corFile.startsWith('http://') || corFile.startsWith('https://')) {
@@ -256,8 +288,7 @@ export async function POST(request: NextRequest) {
         const corBuffer = base64ToBuffer(corFile);
         const corMimeType = extractMimeType(corFile);
         const corExtension = corMimeType === 'application/pdf' ? 'pdf' : 'jpg';
-        // ⭐ Add timestamp to COR filename
-        const corPath = `ID_Validation_Files/${studentNumber}/${studentNumber}_cor_${timestamp}.${corExtension}`;
+        const corPath = `ID_Validation_Files/${studentNumber}/${studentNumber}_cor.${corExtension}`;
         
         console.log(`COR details:`, {
           bufferSize: `${corBuffer.length} bytes`,
@@ -269,7 +300,6 @@ export async function POST(request: NextRequest) {
         await corFileRef.save(corBuffer, {
           metadata: { 
             contentType: corMimeType,
-            cacheControl: 'public, max-age=300, must-revalidate', // ⭐ Cache for only 5 minutes
             metadata: {
               firebaseStorageDownloadTokens: Date.now().toString(),
             }
@@ -279,8 +309,7 @@ export async function POST(request: NextRequest) {
         
         await corFileRef.makePublic();
         
-        // ⭐ Add cache-busting parameter
-        corUrl = `https://storage.googleapis.com/${STORAGE_BUCKET}/${corPath}?t=${timestamp}`;
+        corUrl = `https://storage.googleapis.com/${STORAGE_BUCKET}/${corPath}`;
         console.log(`✅ COR uploaded: ${corUrl}`);
       } catch (error: any) {
         console.error('❌ COR upload failed:', error);
