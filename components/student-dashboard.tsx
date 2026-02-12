@@ -8,7 +8,7 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 import { auth, db } from "@/lib/firebaseConfig";
 import { signOut } from "firebase/auth";
 import { collection, getDocs, query, where } from "firebase/firestore";
-import { ChevronDown, ChevronUp, AlertCircle, ArrowRight, CheckCircle2, Clock } from "lucide-react";
+import { ChevronDown, ChevronUp, AlertCircle, ArrowRight, CheckCircle2, Clock, FileWarning } from "lucide-react";
 
 export default function StudentDashboard() {
   const router = useRouter();
@@ -19,6 +19,7 @@ export default function StudentDashboard() {
   const [validationStatus, setValidationStatus] = useState<
     "not_submitted" | "pending" | "accepted" | "rejected"
   >("not_submitted");
+  const [activeOffensesCount, setActiveOffensesCount] = useState(0);
 
   const fetchValidationStatus = async (uid: string) => {
     try {
@@ -58,6 +59,21 @@ export default function StudentDashboard() {
     }
   };
 
+  const fetchActiveOffenses = async (uid: string) => {
+    try {
+      const q = query(
+        collection(db, "student_offenses"),
+        where("studentUid", "==", uid),
+        where("status", "==", "active")
+      );
+      const snap = await getDocs(q);
+      setActiveOffensesCount(snap.size);
+    } catch (err) {
+      console.error("Failed to fetch offenses:", err);
+      setActiveOffensesCount(0);
+    }
+  };
+
   /**
    * Sets up event listeners and loads initial data
    */
@@ -71,7 +87,10 @@ export default function StudentDashboard() {
         return;
       }
       setUser(currentUser);
-      await fetchValidationStatus(currentUser.uid);
+      await Promise.all([
+        fetchValidationStatus(currentUser.uid),
+        fetchActiveOffenses(currentUser.uid)
+      ]);
     } catch (err: any) {
       handleErrors(err);
     } finally {
@@ -189,7 +208,7 @@ export default function StudentDashboard() {
   const currentStatus = statusConfig[validationStatus];
 
   return (
-    <div className="w-full max-w-6xl mx-auto space-y-6 px-4 py-6">
+    <div className="w-full max-w-6xl mx-auto space-y-4 md:space-y-6 px-2 md:px-4 py-4 md:py-6">
       {error && (
         <Alert variant="destructive" className="shadow-lg">
           <AlertCircle className="h-5 w-5" />
@@ -198,38 +217,38 @@ export default function StudentDashboard() {
       )}
 
       <Card className="relative overflow-hidden border-none shadow-xl bg-gradient-to-br from-[#b32032] to-[#8b1828] text-white">
-        <div className="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full -mr-32 -mt-32" />
-        <CardHeader className="relative space-y-2">
-          <CardTitle className="text-2xl md:text-3xl font-bold">Welcome back!</CardTitle>
-          <CardDescription className="text-white/90 text-base">Manage your ID validation, feedback, and account information.</CardDescription>
+        <div className="absolute top-0 right-0 w-48 md:w-64 h-48 md:h-64 bg-white/10 rounded-full -mr-24 md:-mr-32 -mt-24 md:-mt-32" />
+        <CardHeader className="relative space-y-2 p-4 md:p-6">
+          <CardTitle className="text-xl md:text-3xl font-bold">Welcome back!</CardTitle>
+          <CardDescription className="text-white/90 text-sm md:text-base">Manage your ID validation, feedback, and account information.</CardDescription>
         </CardHeader>
-        <CardContent className="relative">
-          <div className="flex flex-wrap gap-3 items-center bg-white/15 border border-white/25 backdrop-blur-sm rounded-lg px-4 py-3 w-fit">
-            <CheckCircle2 className="w-5 h-5" />
-            <p className="font-semibold">{user?.email || "Student"}</p>
+        <CardContent className="relative p-4 md:p-6 pt-0 md:pt-0">
+          <div className="flex flex-wrap gap-2 md:gap-3 items-center bg-white/15 border border-white/25 backdrop-blur-sm rounded-lg px-3 md:px-4 py-2 md:py-3 w-fit">
+            <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" />
+            <p className="font-semibold text-sm md:text-base truncate max-w-[200px] md:max-w-none">{user?.email || "Student"}</p>
           </div>
         </CardContent>
       </Card>
 
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4 md:gap-6">
         <Card
           className="border-[#e9b3bd] shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer group"
           onClick={() => router.push("/clients/students/dashboard/validation-request")}
         >
-          <CardHeader className="bg-gradient-to-br from-[#fdf1f3] to-white">
-            <div className="flex items-start justify-between gap-4">
+          <CardHeader className="bg-gradient-to-br from-[#fdf1f3] to-white p-4 md:p-6">
+            <div className="flex items-start justify-between gap-3 md:gap-4">
               <div>
-                <CardTitle className="text-xl text-[#b32032] group-hover:text-[#8b1828] transition-colors">ID Validation Request</CardTitle>
-                <CardDescription className="mt-2">Submit or check your validation status</CardDescription>
+                <CardTitle className="text-lg md:text-xl text-[#b32032] group-hover:text-[#8b1828] transition-colors">ID Validation Request</CardTitle>
+                <CardDescription className="mt-1 md:mt-2 text-sm">Submit or check your validation status</CardDescription>
               </div>
-              <ArrowRight className="w-6 h-6 text-[#b32032] group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-5 h-5 md:w-6 md:h-6 text-[#b32032] group-hover:translate-x-1 transition-transform flex-shrink-0" />
             </div>
           </CardHeader>
-          <CardContent className="pt-6">
-            <div className={`flex items-center gap-3 rounded-lg p-4 border ${currentStatus.badgeClass}`}>
-              <Clock className={`w-5 h-5 ${currentStatus.iconColor}`} />
+          <CardContent className="p-4 md:p-6 pt-4 md:pt-6">
+            <div className={`flex items-center gap-3 rounded-lg p-3 md:p-4 border ${currentStatus.badgeClass}`}>
+              <Clock className={`w-4 h-4 md:w-5 md:h-5 ${currentStatus.iconColor}`} />
               <div>
-                <p className={`text-sm font-semibold ${currentStatus.textClass}`}>Status</p>
+                <p className={`text-xs md:text-sm font-semibold ${currentStatus.textClass}`}>Status</p>
                 <p className={`text-xs ${currentStatus.textClass}`}>{currentStatus.label}</p>
               </div>
             </div>
@@ -240,38 +259,71 @@ export default function StudentDashboard() {
           className="border-[#e9b3bd] shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer group"
           onClick={() => router.push("/clients/students/dashboard/user-info")}
         >
-          <CardHeader className="bg-gradient-to-br from-[#fdf1f3] to-white">
-            <div className="flex items-start justify-between gap-4">
+          <CardHeader className="bg-gradient-to-br from-[#fdf1f3] to-white p-4 md:p-6">
+            <div className="flex items-start justify-between gap-3 md:gap-4">
               <div>
-                <CardTitle className="text-xl text-[#b32032] group-hover:text-[#8b1828] transition-colors">User Information</CardTitle>
-                <CardDescription className="mt-2">View and update your profile</CardDescription>
+                <CardTitle className="text-lg md:text-xl text-[#b32032] group-hover:text-[#8b1828] transition-colors">User Information</CardTitle>
+                <CardDescription className="mt-1 md:mt-2 text-sm">View and update your profile</CardDescription>
               </div>
-              <ArrowRight className="w-6 h-6 text-[#b32032] group-hover:translate-x-1 transition-transform" />
+              <ArrowRight className="w-5 h-5 md:w-6 md:h-6 text-[#b32032] group-hover:translate-x-1 transition-transform flex-shrink-0" />
             </div>
           </CardHeader>
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-4">
-              <CheckCircle2 className="w-5 h-5 text-green-600" />
+          <CardContent className="p-4 md:p-6 pt-4 md:pt-6">
+            <div className="flex items-center gap-3 bg-green-50 border border-green-200 rounded-lg p-3 md:p-4">
+              <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5 text-green-600" />
               <div>
-                <p className="text-sm font-semibold text-green-900">Profile</p>
+                <p className="text-xs md:text-sm font-semibold text-green-900">Profile</p>
                 <p className="text-xs text-green-700">Complete and verified</p>
               </div>
             </div>
           </CardContent>
         </Card>
-      </div>
 
-      <Card className="border-[#e9b3bd] shadow-md">
-        <CardHeader className="bg-gradient-to-br from-[#fdf1f3] to-white hover:from-[#f8dfe4] hover:to-white transition-all">
-          <div className="flex items-center justify-between cursor-pointer" onClick={() => router.push('/clients/students/dashboard/feedback-reports')}>
-            <div>
-              <CardTitle className="text-xl text-[#b32032]">Give Feedback</CardTitle>
-              <CardDescription className="mt-1">Share your experience and suggestions</CardDescription>
+        {/* My Offenses Card */}
+        <Card
+          className={`border-[#e9b3bd] shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer group ${activeOffensesCount > 0 ? 'border-red-400' : ''}`}
+          onClick={() => router.push("/clients/students/dashboard/osa-records")}
+        >
+          <CardHeader className="bg-gradient-to-br from-[#fdf1f3] to-white p-4 md:p-6">
+            <div className="flex items-start justify-between gap-3 md:gap-4">
+              <div>
+                <CardTitle className="text-lg md:text-xl text-[#b32032] group-hover:text-[#8b1828] transition-colors">My Offenses</CardTitle>
+                <CardDescription className="mt-1 md:mt-2 text-sm">View your OSA disciplinary records</CardDescription>
+              </div>
+              <ArrowRight className="w-5 h-5 md:w-6 md:h-6 text-[#b32032] group-hover:translate-x-1 transition-transform flex-shrink-0" />
             </div>
-            <ArrowRight className="w-6 h-6 text-[#b32032]" />
-          </div>
-        </CardHeader>
-      </Card>
+          </CardHeader>
+          <CardContent className="p-4 md:p-6 pt-4 md:pt-6">
+            <div className={`flex items-center gap-3 rounded-lg p-3 md:p-4 border ${activeOffensesCount > 0 ? 'bg-red-50 border-red-300' : 'bg-green-50 border-green-200'}`}>
+              <FileWarning className={`w-4 h-4 md:w-5 md:h-5 ${activeOffensesCount > 0 ? 'text-red-600' : 'text-green-600'}`} />
+              <div>
+                <p className={`text-xs md:text-sm font-semibold ${activeOffensesCount > 0 ? 'text-red-900' : 'text-green-900'}`}>
+                  {activeOffensesCount > 0 ? 'Active Offense(s)' : 'Status'}
+                </p>
+                <p className={`text-xs ${activeOffensesCount > 0 ? 'text-red-700' : 'text-green-700'}`}>
+                  {activeOffensesCount > 0 ? `${activeOffensesCount} unresolved offense(s)` : 'No active offenses'}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Give Feedback Card */}
+        <Card
+          className="border-[#e9b3bd] shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer group"
+          onClick={() => router.push("/clients/students/dashboard/feedback-reports")}
+        >
+          <CardHeader className="bg-gradient-to-br from-[#fdf1f3] to-white p-4 md:p-6">
+            <div className="flex items-start justify-between gap-3 md:gap-4">
+              <div>
+                <CardTitle className="text-lg md:text-xl text-[#b32032] group-hover:text-[#8b1828] transition-colors">Give Feedback</CardTitle>
+                <CardDescription className="mt-1 md:mt-2 text-sm">Share your experience and suggestions</CardDescription>
+              </div>
+              <ArrowRight className="w-5 h-5 md:w-6 md:h-6 text-[#b32032] group-hover:translate-x-1 transition-transform flex-shrink-0" />
+            </div>
+          </CardHeader>
+        </Card>
+      </div>
     </div>
   );
 }

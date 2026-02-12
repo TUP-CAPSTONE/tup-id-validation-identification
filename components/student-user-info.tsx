@@ -19,7 +19,6 @@ export default function StudentUserInfo() {
   const [profile, setProfile] = useState<any | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
-  const [upcomingValidation, setUpcomingValidation] = useState<any | null>(null);
   const [editMode, setEditMode] = useState(false);
   const [editingData, setEditingData] = useState<any>(null);
   const [isSaving, setIsSaving] = useState(false);
@@ -65,15 +64,6 @@ export default function StudentUserInfo() {
       if (profileData) {
         setProfile(profileData);
         setEditingData(profileData);
-      }
-
-      // Fetch upcoming validation schedule (settings/validation)
-      try {
-        const settingsRef = doc(db, 'settings', 'validation');
-        const settingsSnap = await getDoc(settingsRef);
-        if (settingsSnap.exists()) setUpcomingValidation(settingsSnap.data());
-      } catch (err) {
-        console.warn('Failed to load validation schedule', err);
       }
     } catch (err: any) {
       console.error(err);
@@ -178,7 +168,6 @@ export default function StudentUserInfo() {
       if (!u) {
         setProfile(null);
         setEditingData(null);
-        setUpcomingValidation(null);
         setLoading(false);
         return;
       }
@@ -421,25 +410,6 @@ export default function StudentUserInfo() {
             </div>
           ) : (
             <div className="text-sm text-gray-600">No profile found. Please contact support.</div>
-          )}
-        </CardContent>
-      </Card>
-
-      <Card className="mt-4 border-red-200 p-4 md:p-6">
-        <CardHeader className="bg-red-50 -mx-4 -mt-4 p-4 md:-mx-6 md:-mt-6 md:p-6 rounded-t-md">
-          <CardTitle className="text-red-700">Upcoming Validation</CardTitle>
-          <CardDescription>Next scheduled validation</CardDescription>
-        </CardHeader>
-        <CardContent>
-          {upcomingValidation ? (
-            <div className="space-y-2">
-              {upcomingValidation.nextDate ? (
-                <p className="text-sm"><strong>Next Date:</strong> <span className="ml-2 inline-flex items-center rounded-full bg-[#b32032] px-3 py-1 text-xs font-semibold text-white">{new Date(upcomingValidation.nextDate.toDate ? upcomingValidation.nextDate.toDate() : upcomingValidation.nextDate).toLocaleString()}</span></p>
-              ) : null}
-              {upcomingValidation.message && <p className="text-sm text-gray-700">{upcomingValidation.message}</p>}
-            </div>
-          ) : (
-            <div className="text-sm text-gray-600">No upcoming validation scheduled.</div>
           )}
         </CardContent>
       </Card>
