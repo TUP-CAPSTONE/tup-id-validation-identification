@@ -72,6 +72,14 @@ export const rateLimiters = {
     analytics: true,
     prefix: "ratelimit:osa:login",
   }),
+
+  // Student registration - 5 per hour per IP (prevents spam registrations)
+  studentRegistration: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(5, "1 h"),
+    analytics: true,
+    prefix: "ratelimit:student:registration",
+  }),
 }
 
 // Helper function to check rate limit and return standardized response

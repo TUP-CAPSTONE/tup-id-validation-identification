@@ -132,6 +132,26 @@ export default function AdminDashboardPage() {
     return () => clearInterval(interval)
   }, [])
 
+  const defaultStats: DashboardStats = {
+    systemAccounts: { total: 0, admin: 0, osa: 0, gate: 0, activeNow: 0 },
+    students: { total: 0, validated: 0, notValidated: 0, pendingRegistrations: 0 },
+    registrations: { pending: 0, approved: 0, rejected: 0, total: 0 },
+    idValidation: { pending: 0, accepted: 0, rejected: 0, total: 0 },
+    activeSessions: [],
+    recentLoginActivity: [],
+    recentActivity: [],
+  }
+
+  const safeStats: DashboardStats = {
+    systemAccounts: { ...defaultStats.systemAccounts, ...(stats?.systemAccounts ?? {}) },
+    students: { ...defaultStats.students, ...(stats?.students ?? {}) },
+    registrations: { ...defaultStats.registrations, ...(stats?.registrations ?? {}) },
+    idValidation: { ...defaultStats.idValidation, ...(stats?.idValidation ?? {}) },
+    activeSessions: stats?.activeSessions ?? defaultStats.activeSessions,
+    recentLoginActivity: stats?.recentLoginActivity ?? defaultStats.recentLoginActivity,
+    recentActivity: stats?.recentActivity ?? defaultStats.recentActivity,
+  }
+
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full">
@@ -165,10 +185,10 @@ export default function AdminDashboardPage() {
                         ) : (
                           <>
                             <div className="text-2xl font-bold">
-                              {stats?.systemAccounts.total || 0}
+                              {safeStats.systemAccounts.total}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                              {stats?.systemAccounts.activeNow || 0} active now
+                              {safeStats.systemAccounts.activeNow} active now
                             </p>
                           </>
                         )}
@@ -189,10 +209,10 @@ export default function AdminDashboardPage() {
                         ) : (
                           <>
                             <div className="text-2xl font-bold">
-                              {stats?.students.total || 0}
+                              {safeStats.students.total}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
-                              {stats?.students.validated || 0} validated
+                              {safeStats.students.validated} validated
                             </p>
                           </>
                         )}
@@ -213,7 +233,7 @@ export default function AdminDashboardPage() {
                         ) : (
                           <>
                             <div className="text-2xl font-bold">
-                              {stats?.registrations.pending || 0}
+                              {safeStats.registrations.pending}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
                               Awaiting approval
@@ -237,7 +257,7 @@ export default function AdminDashboardPage() {
                         ) : (
                           <>
                             <div className="text-2xl font-bold">
-                              {stats?.idValidation.pending || 0}
+                              {safeStats.idValidation.pending}
                             </div>
                             <p className="text-xs text-muted-foreground mt-1">
                               Awaiting review
@@ -256,7 +276,7 @@ export default function AdminDashboardPage() {
                     <CardHeader>
                       <CardTitle className="flex items-center gap-2">
                         <Activity className="h-5 w-5 text-green-500" />
-                        Active Sessions ({stats?.activeSessions.length || 0})
+                        Active Sessions ({safeStats.activeSessions.length})
                       </CardTitle>
                       <CardDescription>Currently logged in system accounts</CardDescription>
                     </CardHeader>
@@ -267,9 +287,9 @@ export default function AdminDashboardPage() {
                             <Skeleton key={i} className="h-16 w-full" />
                           ))}
                         </div>
-                      ) : stats?.activeSessions && stats.activeSessions.length > 0 ? (
+                      ) : safeStats.activeSessions.length > 0 ? (
                         <div className="space-y-3 max-h-64 overflow-y-auto">
-                          {stats.activeSessions.map((session, index) => (
+                          {safeStats.activeSessions.map((session, index) => (
                             <div key={index} className="flex items-start gap-3 p-3 rounded-lg bg-green-50 border border-green-200">
                               <div className="flex h-10 w-10 items-center justify-center rounded-full bg-green-100">
                                 <UserCog className="h-5 w-5 text-green-600" />
@@ -311,9 +331,9 @@ export default function AdminDashboardPage() {
                         <Button variant="outline" className="w-full justify-start">
                           <FileText className="mr-2 h-4 w-4" />
                           Manage ID Validation Requests
-                          {stats && stats.idValidation.pending > 0 && (
+                          {safeStats.idValidation.pending > 0 && (
                             <Badge variant="destructive" className="ml-auto">
-                              {stats.idValidation.pending}
+                              {safeStats.idValidation.pending}
                             </Badge>
                           )}
                         </Button>
@@ -330,9 +350,9 @@ export default function AdminDashboardPage() {
                         <Button variant="outline" className="w-full justify-start">
                           <Users className="mr-2 h-4 w-4" />
                           Manage Student Registrations
-                          {stats && stats.registrations.pending > 0 && (
+                          {safeStats.registrations.pending > 0 && (
                             <Badge variant="secondary" className="ml-auto">
-                              {stats.registrations.pending}
+                              {safeStats.registrations.pending}
                             </Badge>
                           )}
                         </Button>
@@ -371,9 +391,9 @@ export default function AdminDashboardPage() {
                             <Skeleton key={i} className="h-16 w-full" />
                           ))}
                         </div>
-                      ) : stats?.recentLoginActivity && stats.recentLoginActivity.length > 0 ? (
+                      ) : safeStats.recentLoginActivity.length > 0 ? (
                         <div className="space-y-3 max-h-96 overflow-y-auto">
-                          {stats.recentLoginActivity.map((activity, index) => (
+                          {safeStats.recentLoginActivity.map((activity, index) => (
                             <div key={index} className="flex items-start gap-4 p-3 rounded-lg border">
                               <div className={`flex h-10 w-10 items-center justify-center rounded-full ${
                                 activity.action === "login" ? "bg-green-100" : "bg-gray-100"
@@ -445,7 +465,7 @@ export default function AdminDashboardPage() {
                                 <span className="text-sm font-medium">Admin</span>
                               </div>
                               <span className="text-sm font-bold">
-                                {stats?.systemAccounts.admin || 0}
+                                {safeStats.systemAccounts.admin}
                               </span>
                             </div>
                             <div className="flex items-center justify-between">
@@ -454,7 +474,7 @@ export default function AdminDashboardPage() {
                                 <span className="text-sm font-medium">OSA</span>
                               </div>
                               <span className="text-sm font-bold">
-                                {stats?.systemAccounts.osa || 0}
+                                {safeStats.systemAccounts.osa}
                               </span>
                             </div>
                             <div className="flex items-center justify-between">
@@ -463,14 +483,14 @@ export default function AdminDashboardPage() {
                                 <span className="text-sm font-medium">Gate</span>
                               </div>
                               <span className="text-sm font-bold">
-                                {stats?.systemAccounts.gate || 0}
+                                {safeStats.systemAccounts.gate}
                               </span>
                             </div>
                             <Separator className="my-2" />
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-semibold">Total</span>
                               <span className="text-sm font-bold">
-                                {stats?.systemAccounts.total || 0}
+                                {safeStats.systemAccounts.total}
                               </span>
                             </div>
                           </div>
@@ -500,7 +520,7 @@ export default function AdminDashboardPage() {
                                 <span className="text-sm font-medium">Validated</span>
                               </div>
                               <span className="text-sm font-bold">
-                                {stats?.students.validated || 0}
+                                {safeStats.students.validated}
                               </span>
                             </div>
                             <div className="flex items-center justify-between">
@@ -509,7 +529,7 @@ export default function AdminDashboardPage() {
                                 <span className="text-sm font-medium">Not Validated</span>
                               </div>
                               <span className="text-sm font-bold">
-                                {stats?.students.notValidated || 0}
+                                {safeStats.students.notValidated}
                               </span>
                             </div>
                             <div className="flex items-center justify-between">
@@ -518,14 +538,14 @@ export default function AdminDashboardPage() {
                                 <span className="text-sm font-medium">Pending Request</span>
                               </div>
                               <span className="text-sm font-bold">
-                                {stats?.students.pendingRegistrations || 0}
+                                {safeStats.students.pendingRegistrations}
                               </span>
                             </div>
                             <Separator className="my-2" />
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-semibold">Total Students</span>
                               <span className="text-sm font-bold">
-                                {stats?.students.total || 0}
+                                {safeStats.students.total}
                               </span>
                             </div>
                           </div>
@@ -555,7 +575,7 @@ export default function AdminDashboardPage() {
                                 <span className="text-sm font-medium">Pending</span>
                               </div>
                               <span className="text-sm font-bold">
-                                {stats?.idValidation.pending || 0}
+                                {safeStats.idValidation.pending}
                               </span>
                             </div>
                             <div className="flex items-center justify-between">
@@ -564,7 +584,7 @@ export default function AdminDashboardPage() {
                                 <span className="text-sm font-medium">Accepted</span>
                               </div>
                               <span className="text-sm font-bold">
-                                {stats?.idValidation.accepted || 0}
+                                {safeStats.idValidation.accepted}
                               </span>
                             </div>
                             <div className="flex items-center justify-between">
@@ -573,14 +593,14 @@ export default function AdminDashboardPage() {
                                 <span className="text-sm font-medium">Rejected</span>
                               </div>
                               <span className="text-sm font-bold">
-                                {stats?.idValidation.rejected || 0}
+                                {safeStats.idValidation.rejected}
                               </span>
                             </div>
                             <Separator className="my-2" />
                             <div className="flex items-center justify-between">
                               <span className="text-sm font-semibold">Total</span>
                               <span className="text-sm font-bold">
-                                {stats?.idValidation.total || 0}
+                                {safeStats.idValidation.total}
                               </span>
                             </div>
                           </div>

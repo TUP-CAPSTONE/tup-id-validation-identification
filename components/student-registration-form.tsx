@@ -2,7 +2,7 @@
 
 import { auth, db } from "@/lib/firebaseConfig";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
-import { doc, setDoc, serverTimestamp, query, collection, where, getDocs } from "firebase/firestore";
+import { query, collection, where, getDocs } from "firebase/firestore";
 import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
@@ -20,6 +20,7 @@ import {
   DialogHeader,
   DialogTitle,
 } from "@/components/ui/dialog";
+import { FacePhotoCapture, FacePhotos } from "@/components/face-photo-capture";
 
 export function StudentRegistrationForm({
   className,
@@ -56,6 +57,19 @@ export function StudentRegistrationForm({
   const [verificationCodes, setVerificationCodes] = useState({ student: "", guardian: "" });
   const [sentCodes, setSentCodes] = useState({ student: "", guardian: "" });
   const [sendingCodes, setSendingCodes] = useState(false);
+  
+  // Face photos state
+  const [facePhotos, setFacePhotos] = useState<FacePhotos>({
+    neutral: null,
+    smile: null,
+    left: null,
+    right: null,
+    up: null,
+    down: null,
+  });
+
+  // Check if all face photos are captured
+  const allFacePhotosCaptured = Object.values(facePhotos).every((photo) => photo !== null);
   
   // Guardian email validation function
   const validateGuardianEmail = async (email: string): Promise<boolean> => {
@@ -101,6 +115,13 @@ export function StudentRegistrationForm({
       !formData.guardian_phone_number
     ) {
       setError("Please fill in all required fields");
+      setSendingCodes(false);
+      return;
+    }
+
+    // Validate face photos
+    if (!allFacePhotosCaptured) {
+      setError("Please capture all 6 face photos before submitting");
       setSendingCodes(false);
       return;
     }
@@ -155,31 +176,33 @@ export function StudentRegistrationForm({
     }
 
     try {
-      // Check if TUP ID already exists in registration_requests
-      const qReqs = query(
-        collection(db, REG_REQUESTS_COLLECTION), 
-        where("tup_id", "==", formData.tup_id)
-      );
-      const snapReqs = await getDocs(qReqs);
-      if (!snapReqs.empty) {
-        throw new Error("This TUP ID is already registered. Contact admin if this is a mistake.");
-      }
-
-      // Use TUP ID as document ID and save registration data (no auth account creation)
-      await setDoc(doc(db, REG_REQUESTS_COLLECTION, formData.tup_id), {
-        name: formData.name,
-        tup_id: formData.tup_id,
-        bday: formData.bday,
-        student_email: formData.student_email,
-        student_phone_num: formData.student_phone_num,
-        guardian_email: formData.guardian_email,
-        guardian_phone_number: formData.guardian_phone_number,
-        createdAt: serverTimestamp(),
-        status: "pending",
-        emailsVerified: true
+      // Submit via API with rate limiting
+      const response = await fetch('/api/student/registration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          tup_id: formData.tup_id,
+          bday: formData.bday,
+          student_email: formData.student_email,
+          student_phone_num: formData.student_phone_num,
+          guardian_email: formData.guardian_email,
+          guardian_phone_number: formData.guardian_phone_number,
+          facePhotos,
+        })
       });
 
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error("Too many registration attempts. Please try again later.");
+        }
+        throw new Error(data.error || 'Registration failed');
+      }
+
       setSuccess("Registration submitted successfully! Your emails have been verified and your information has been saved. You will be notified once your account is approved.");
+      setShowSuccessDialog(true);
 
       // Clear form
       setFormData({
@@ -190,6 +213,14 @@ export function StudentRegistrationForm({
         student_phone_num: "",
         guardian_email: "",
         guardian_phone_number: "",
+      });
+      setFacePhotos({
+        neutral: null,
+        smile: null,
+        left: null,
+        right: null,
+        up: null,
+        down: null,
       });
       setShowVerification(false);
       setVerificationCodes({ student: "", guardian: "" });
@@ -223,6 +254,13 @@ export function StudentRegistrationForm({
       return;
     }
 
+    // Validate face photos
+    if (!allFacePhotosCaptured) {
+      setError("Please capture all 6 face photos before submitting");
+      setLoading(false);
+      return;
+    }
+
     // Validate guardian email
     const isGuardianEmailValid = await validateGuardianEmail(formData.guardian_email);
     if (!isGuardianEmailValid) {
@@ -232,28 +270,30 @@ export function StudentRegistrationForm({
     }
 
     try {
-      // Check if TUP ID already exists in registration_requests
-      const qReqs = query(
-        collection(db, REG_REQUESTS_COLLECTION), 
-        where("tup_id", "==", formData.tup_id)
-      );
-      const snapReqs = await getDocs(qReqs);
-      if (!snapReqs.empty) {
-        throw new Error("This TUP ID is already registered. Contact admin if this is a mistake.");
-      }
-
-      // Use TUP ID as document ID and save registration data (no auth account creation)
-      await setDoc(doc(db, REG_REQUESTS_COLLECTION, formData.tup_id), {
-        name: formData.name,
-        tup_id: formData.tup_id,
-        bday: formData.bday,
-        student_email: formData.student_email,
-        student_phone_num: formData.student_phone_num,
-        guardian_email: formData.guardian_email,
-        guardian_phone_number: formData.guardian_phone_number,
-        createdAt: serverTimestamp(),
-        status: "pending",
+      // Submit via API with rate limiting
+      const response = await fetch('/api/student/registration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          tup_id: formData.tup_id,
+          bday: formData.bday,
+          student_email: formData.student_email,
+          student_phone_num: formData.student_phone_num,
+          guardian_email: formData.guardian_email,
+          guardian_phone_number: formData.guardian_phone_number,
+          facePhotos,
+        })
       });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error("Too many registration attempts. Please try again later.");
+        }
+        throw new Error(data.error || 'Registration failed');
+      }
 
       setSuccess("Registration submitted successfully! Your information has been saved. You will be notified once your account is approved.");
       setShowSuccessDialog(true);
@@ -267,6 +307,14 @@ export function StudentRegistrationForm({
         student_phone_num: "",
         guardian_email: "",
         guardian_phone_number: "",
+      });
+      setFacePhotos({
+        neutral: null,
+        smile: null,
+        left: null,
+        right: null,
+        up: null,
+        down: null,
       });
 
     } catch (err) {
@@ -326,6 +374,13 @@ export function StudentRegistrationForm({
       return;
     }
 
+    // Validate face photos
+    if (!allFacePhotosCaptured) {
+      setError("Please capture all 6 face photos before submitting");
+      setLoading(false);
+      return;
+    }
+
     // Validate guardian email
     const isGuardianEmailValid = await validateGuardianEmail(formData.guardian_email);
     if (!isGuardianEmailValid) {
@@ -335,30 +390,32 @@ export function StudentRegistrationForm({
     }
 
     try {
-      // Check if TUP ID already exists
-      const qReqs = query(
-        collection(db, REG_REQUESTS_COLLECTION), 
-        where("tup_id", "==", formData.tup_id)
-      );
-      const snapReqs = await getDocs(qReqs);
-      if (!snapReqs.empty) {
-        throw new Error("This TUP ID is already registered. Contact admin if this is a mistake.");
-      }
-
-      // Save to registration_requests using TUP ID as document ID
-      await setDoc(doc(db, REG_REQUESTS_COLLECTION, formData.tup_id), {
-        name: formData.name,
-        tup_id: formData.tup_id,
-        bday: formData.bday,
-        student_email: formData.student_email,
-        student_phone_num: formData.student_phone_num,
-        guardian_email: formData.guardian_email,
-        guardian_phone_number: formData.guardian_phone_number,
-        createdAt: serverTimestamp(),
-        status: "pending",
-        uid: googleUserData.uid,
-        authProvider: "google"
+      // Submit via API with rate limiting
+      const response = await fetch('/api/student/registration', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          name: formData.name,
+          tup_id: formData.tup_id,
+          bday: formData.bday,
+          student_email: formData.student_email,
+          student_phone_num: formData.student_phone_num,
+          guardian_email: formData.guardian_email,
+          guardian_phone_number: formData.guardian_phone_number,
+          facePhotos,
+          uid: googleUserData.uid,
+          authProvider: "google"
+        })
       });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        if (response.status === 429) {
+          throw new Error("Too many registration attempts. Please try again later.");
+        }
+        throw new Error(data.error || 'Registration failed');
+      }
 
       setSuccess("Registration submitted with Google account! Your information has been saved. You will be notified once your account is approved.");
       setShowSuccessDialog(true);
@@ -372,6 +429,14 @@ export function StudentRegistrationForm({
         student_phone_num: "",
         guardian_email: "",
         guardian_phone_number: "",
+      });
+      setFacePhotos({
+        neutral: null,
+        smile: null,
+        left: null,
+        right: null,
+        up: null,
+        down: null,
       });
       setShowGoogleForm(false);
       setGoogleUserData(null);
@@ -401,9 +466,9 @@ export function StudentRegistrationForm({
 
   return (
     <div className={cn("w-full bg-white", className)} {...props}>
-      <div className="bg-white rounded-lg border border-red-100 shadow-md overflow-hidden">
+      <div className="bg-white rounded-lg border border-red-100 shadow-md relative isolate">
         {/* Form Header Section */}
-        <div className="bg-linear-to-r from-red-50 to-red-25 border-b border-red-100 px-6 md:px-8 py-6">
+        <div className="bg-linear-to-r from-red-50 to-red-25 border-b border-red-100 px-6 md:px-8 py-6 relative z-50 bg-white">
           <div className="flex justify-between items-start gap-4">
             <div>
               <h2 className="text-2xl md:text-3xl font-bold text-[#b32032] tracking-tight mb-2">Create Your Account</h2>
@@ -416,7 +481,7 @@ export function StudentRegistrationForm({
         </div>
 
         {/* Form Content */}
-        <div className="px-6 md:px-8 py-8">
+        <div className="px-6 md:px-8 py-8 relative z-0">
           <FieldGroup className="space-y-6">
             {error && (
               <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
@@ -589,6 +654,19 @@ export function StudentRegistrationForm({
                   required
                 />
               </Field>
+            </div>
+
+            {/* Face Photo Capture Section */}
+            <div className="pt-2">
+              <h3 className="text-sm font-semibold uppercase tracking-wide text-[#b32032] mb-4 flex items-center">
+                <span className="w-1 h-1 rounded-full bg-[#b32032] mr-3"></span>
+                Face Photo Verification
+              </h3>
+              <FacePhotoCapture
+                photos={facePhotos}
+                onPhotosChange={setFacePhotos}
+                disabled={loading || showVerification}
+              />
             </div>
 
             {/* Guardian Information Section */}
