@@ -146,7 +146,7 @@ export async function POST(req: Request) {
       createdAt: now,
     })
 
-    batch.set(adminDB.collection("student_profiles").doc(studentDocId), {
+    batch.set(adminDB.collection("student_profiles").doc(userRecord.uid), {
       uid: userRecord.uid,
       studentNumber: tupId,
       email: studentEmail,

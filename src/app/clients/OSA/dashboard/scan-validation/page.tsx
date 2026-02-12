@@ -23,6 +23,7 @@ import { toast } from "sonner"
 
 interface StudentInfo {
   id: string
+  tupId: string
   name: string
   course: string
   section: string
