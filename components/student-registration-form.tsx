@@ -468,20 +468,20 @@ export function StudentRegistrationForm({
     <div className={cn("w-full bg-white", className)} {...props}>
       <div className="bg-white rounded-lg border border-red-100 shadow-md relative isolate">
         {/* Form Header Section */}
-        <div className="bg-linear-to-r from-red-50 to-red-25 border-b border-red-100 px-6 md:px-8 py-6 relative z-50 bg-white">
-          <div className="flex justify-between items-start gap-4">
+        <div className="bg-linear-to-r from-red-50 to-red-25 border-b border-red-100 px-4 md:px-8 py-4 md:py-6 relative z-50 bg-white">
+          <div className="flex flex-col sm:flex-row justify-between items-start gap-2 sm:gap-4">
             <div>
-              <h2 className="text-2xl md:text-3xl font-bold text-[#b32032] tracking-tight mb-2">Create Your Account</h2>
-              <p className="text-sm text-gray-600">Fill in your information below to register as a student</p>
+              <h2 className="text-xl md:text-3xl font-bold text-[#b32032] tracking-tight mb-1 md:mb-2">Create Your Account</h2>
+              <p className="text-xs md:text-sm text-gray-600">Fill in your information below to register as a student</p>
             </div>
-            <div className="text-right whitespace-nowrap">
-              <p className="text-sm font-semibold text-[#b32032]">{currentTime}</p>
+            <div className="text-left sm:text-right">
+              <p className="text-xs md:text-sm font-semibold text-[#b32032]">{currentTime}</p>
             </div>
           </div>
         </div>
 
         {/* Form Content */}
-        <div className="px-6 md:px-8 py-8 relative z-0">
+        <div className="px-4 md:px-8 py-4 md:py-8 relative z-0">
           <FieldGroup className="space-y-6">
             {error && (
               <div className="p-4 rounded-lg bg-red-50 border border-red-200 text-red-700 text-sm font-medium">
