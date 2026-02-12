@@ -13,6 +13,7 @@ import {
   ScanQrCodeIcon,
   MessageCircleMore,
   FileWarning,
+  ClipboardList,
 } from "lucide-react";
 
 import { DatePicker } from "@/components/date-picker";
@@ -153,6 +154,26 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
                 <FileWarning className="w-5 h-5" />
 
                 <span className="font-medium text-base">File Offense</span>
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
+
+          {/* Manage Offenses */}
+
+          <SidebarMenuItem>
+            <Link href="/clients/OSA/dashboard/manage-offenses">
+              <SidebarMenuButton
+                className={cn(
+                  "rounded-md transition-colors h-12",
+
+                  pathname.includes("manage-offenses")
+                    ? "bg-blue-100 text-blue-900 hover:bg-blue-200"
+                    : "text-gray-700 hover:bg-gray-100",
+                )}
+              >
+                <ClipboardList className="w-5 h-5" />
+
+                <span className="font-medium text-base">Manage Offenses</span>
               </SidebarMenuButton>
             </Link>
           </SidebarMenuItem>

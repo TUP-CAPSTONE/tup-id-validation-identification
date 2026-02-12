@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import WebcamCapture from '@/components/webcam-capture';
-import { auth } from "@/lib/firebaseConfig";
+import { auth, db } from "@/lib/firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
-import { ArrowLeft, Clock, AlertCircle } from "lucide-react";
+import { collection, query, where, getDocs } from "firebase/firestore";
+import { ArrowLeft, Clock, AlertCircle, Ban } from "lucide-react";
 
 export default function StudentValidationRequest() {
   const router = useRouter();
@@ -47,6 +48,11 @@ export default function StudentValidationRequest() {
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState(false);
+  
+  // Offense blocking state
+  const [hasActiveOffense, setHasActiveOffense] = useState(false);
+  const [activeOffenses, setActiveOffenses] = useState<any[]>([]);
+  const [offenseLoading, setOffenseLoading] = useState(true);
 
   /**
    * College to Courses Mapping for TUP
@@ -143,6 +149,43 @@ export default function StudentValidationRequest() {
   };
 
   /**
+   * Check if student has any active (unresolved) offenses
+   */
+  const checkActiveOffenses = async (uid: string) => {
+    try {
+      setOffenseLoading(true);
+      
+      // Query student_offenses collection for this student
+      const offensesRef = collection(db, "student_offenses");
+      const q = query(
+        offensesRef, 
+        where("studentUid", "==", uid),
+        where("status", "==", "active")
+      );
+      const snapshot = await getDocs(q);
+      
+      if (!snapshot.empty) {
+        const offensesList: any[] = [];
+        snapshot.forEach((doc) => {
+          offensesList.push({ id: doc.id, ...doc.data() });
+        });
+        setActiveOffenses(offensesList);
+        setHasActiveOffense(true);
+      } else {
+        setActiveOffenses([]);
+        setHasActiveOffense(false);
+      }
+    } catch (err) {
+      console.error("Error checking offenses:", err);
+      // On error, don't block - but log the error
+      setActiveOffenses([]);
+      setHasActiveOffense(false);
+    } finally {
+      setOffenseLoading(false);
+    }
+  };
+
+  /**
    * Fetch data from API endpoints
    */
   const fetchData = async (token: string, uid: string) => {
@@ -190,6 +233,7 @@ export default function StudentValidationRequest() {
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
       if (!user) {
         setLoading(false);
+        setOffenseLoading(false);
         return;
       }
 
@@ -200,8 +244,11 @@ export default function StudentValidationRequest() {
         const token = await user.getIdToken();
         setIdToken(token);
 
-        // Fetch data from APIs
-        await fetchData(token, user.uid);
+        // Fetch data from APIs and check offenses in parallel
+        await Promise.all([
+          fetchData(token, user.uid),
+          checkActiveOffenses(user.uid)
+        ]);
       } catch (err) {
         console.error('Error in auth state change:', err);
       } finally {
@@ -262,6 +309,12 @@ export default function StudentValidationRequest() {
     // Check validation period before submitting
     if (!validationPeriod.isActive) {
       setError('Validation period is not currently active. Please check the period status above.');
+      return;
+    }
+
+    // Block submission if student has active offenses
+    if (hasActiveOffense) {
+      setError('You cannot submit a validation request while you have unresolved offenses. Please resolve your offenses with the OSA first.');
       return;
     }
 
@@ -357,7 +410,7 @@ export default function StudentValidationRequest() {
     router.push('/clients/students/dashboard');
   };
 
-  if (loading || periodLoading) {
+  if (loading || periodLoading || offenseLoading) {
     return (
       <div className="flex items-center justify-center p-8">
         <div className="text-center">
@@ -376,6 +429,90 @@ export default function StudentValidationRequest() {
             <CardTitle className="text-red-700">Authentication Required</CardTitle>
             <CardDescription>Please log in to access this page.</CardDescription>
           </CardHeader>
+        </Card>
+      </div>
+    );
+  }
+
+  // Block validation request if student has active (unresolved) offenses
+  if (hasActiveOffense && activeOffenses.length > 0) {
+    return (
+      <div className="w-full max-w-6xl space-y-6">
+        <Button 
+          variant="outline" 
+          onClick={goBackToDashboard}
+          className="flex items-center gap-2 border-red-200 hover:bg-red-50"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Dashboard
+        </Button>
+
+        <Card className="border-red-500 bg-red-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-red-700">
+              <Ban className="h-5 w-5" />
+              ID Validation Request Blocked
+            </CardTitle>
+            <CardDescription className="text-red-600">
+              You have unresolved offense(s) on record. You cannot request ID validation until all offenses are resolved by the Office of Student Affairs (OSA).
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-4">
+              <div className="p-4 bg-white border border-red-300 rounded-lg">
+                <h4 className="font-semibold text-red-800 mb-3">Active Offense(s):</h4>
+                <div className="space-y-3">
+                  {activeOffenses.map((offense, index) => (
+                    <div 
+                      key={offense.id} 
+                      className={`p-3 rounded border ${
+                        offense.offenseType === 'major' 
+                          ? 'bg-red-100 border-red-400' 
+                          : 'bg-amber-100 border-amber-400'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2 mb-1">
+                        <span className={`text-xs font-bold px-2 py-0.5 rounded uppercase ${
+                          offense.offenseType === 'major' 
+                            ? 'bg-red-600 text-white' 
+                            : 'bg-amber-500 text-white'
+                        }`}>
+                          {offense.offenseType || 'minor'} offense
+                        </span>
+                      </div>
+                      <p className="font-semibold text-gray-900 text-sm">
+                        {offense.offenseTitle || 'Offense'}
+                      </p>
+                      {offense.dateCommitted && (
+                        <p className="text-xs text-gray-600 mt-1">
+                          Date: {new Date(offense.dateCommitted.toDate ? offense.dateCommitted.toDate() : offense.dateCommitted).toLocaleDateString()}
+                        </p>
+                      )}
+                      {offense.sanction && (
+                        <p className="text-xs text-gray-700 mt-1">
+                          <strong>Sanction:</strong> {offense.sanction}
+                        </p>
+                      )}
+                    </div>
+                  ))}
+                </div>
+              </div>
+              
+              <div className="p-4 bg-blue-50 border border-blue-200 rounded-lg">
+                <p className="text-sm text-blue-800">
+                  <strong>ℹ️ How to resolve:</strong> Please visit or contact the Office of Student Affairs (OSA) to discuss your offense(s) and fulfill any required sanctions. Once your offense(s) are resolved/lifted, you will be able to submit an ID validation request.
+                </p>
+              </div>
+
+              <Button
+                variant="outline"
+                onClick={() => router.push('/clients/students/osa-records')}
+                className="w-full border-red-200 hover:bg-red-100"
+              >
+                View My Full OSA Records
+              </Button>
+            </div>
+          </CardContent>
         </Card>
       </div>
     );
@@ -813,8 +950,8 @@ export default function StudentValidationRequest() {
       {/* Face Photos Card */}
       <Card className="border-red-200">
         <CardHeader className="bg-red-50">
-          <CardTitle className="text-red-700">Face Photos (3 Angles)</CardTitle>
-          <CardDescription>Capture your face from three different angles</CardDescription>
+          <CardTitle className="text-red-700">Face Photos (Proper Haircut, Hair Color)</CardTitle>
+          <CardDescription>Capture clear photos showing your proper haircut and natural hair color</CardDescription>
         </CardHeader>
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">

@@ -5,11 +5,12 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
+import { Badge } from "@/components/ui/badge";
 import { db, auth, app } from "@/lib/firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, updateDoc, collection, getDocs, query, where } from "firebase/firestore";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { ArrowLeft } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle } from "lucide-react";
 
 const STUDENTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_STUDENTS_COLLECTION || "students";
 
@@ -228,7 +229,20 @@ export default function StudentUserInfo() {
                 <input id="avatarUpload" type="file" accept="image/*" className="hidden" onChange={(e) => handleAvatarUpload(e.target.files ? e.target.files[0] : null)} disabled={uploadingAvatar} />
 
                 <div>
-                  <div className="text-2xl md:text-3xl font-bold text-red-700 leading-tight">{profile.fullName}</div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <span className="text-2xl md:text-3xl font-bold text-red-700 leading-tight">{profile.fullName}</span>
+                    {profile.isValidated ? (
+                      <Badge className="bg-gradient-to-r from-green-600 to-green-700 text-white gap-1.5 px-3 py-1 text-sm font-semibold shadow-md border border-green-500/50">
+                        <CheckCircle2 className="w-4 h-4" />
+                        ID Validated
+                      </Badge>
+                    ) : (
+                      <Badge variant="secondary" className="bg-gradient-to-r from-[#b32032] to-[#951928] text-white gap-1.5 px-3 py-1 text-sm font-semibold shadow-md border border-red-400/50">
+                        <XCircle className="w-4 h-4" />
+                        Not Yet Validated
+                      </Badge>
+                    )}
+                  </div>
                   <div className="text-sm md:text-base text-red-700/90">{profile.email}</div>
                   <div className="text-xs text-red-600 mt-1">{profile.studentNumber}</div>
                   {uploadingAvatar && <div className="text-xs text-red-600 mt-1">Uploading...</div>}

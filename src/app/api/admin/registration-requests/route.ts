@@ -109,6 +109,7 @@ export async function GET(request: NextRequest) {
         status,
         remarks: d.remarks || null,
         reviewedBy: d.reviewedBy || null,
+        facePhotos: d.facePhotos || null,
       };
     });
 

@@ -22,9 +22,12 @@ export type ValidationRequest = {
   yearLevel: string
   idPicture: string
   selfiePictures: {
-    front: string
-    left: string
-    back: string
+    properHaircut?: string
+    hairColor?: string
+    // Legacy fields for backward compatibility
+    front?: string
+    left?: string
+    back?: string
   }
   corFile: string
   status: "pending" | "accepted" | "rejected"

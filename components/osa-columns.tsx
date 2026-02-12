@@ -14,9 +14,12 @@ export type Requests = {
   phoneNumber: string
   idPicture: string
   selfiePictures: {
-    front: string
-    left: string
-    back: string
+    properHaircut?: string
+    hairColor?: string
+    // Legacy fields for backward compatibility
+    front?: string
+    left?: string
+    back?: string
   }
   status: "pending" | "accepted" | "rejected"
   requestTime: string

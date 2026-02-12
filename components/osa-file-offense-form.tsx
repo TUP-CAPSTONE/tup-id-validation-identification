@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -28,9 +28,8 @@ import { Alert, AlertDescription } from "@/components/ui/alert";
 
 interface StudentInfo {
   uid: string;
-  studentId: string;
-  firstName: string;
-  lastName: string;
+  studentNumber: string;
+  fullName: string;
   email: string;
 }
 
@@ -82,9 +81,30 @@ export function OSAFileOffenseForm() {
     }
   }, [selectedOffenseNumber, currentOffenses]);
 
+  // Auto-search with debounce (500ms delay)
+  useEffect(() => {
+    // Don't search if query is too short
+    if (searchQuery.trim().length < 3) {
+      if (searchQuery.trim().length > 0) {
+        setSearchError("");
+      }
+      return;
+    }
+
+    // Clear previous selection when typing
+    setSelectedStudent(null);
+    setSearchError("");
+
+    const debounceTimer = setTimeout(() => {
+      handleSearchStudent();
+    }, 500);
+
+    return () => clearTimeout(debounceTimer);
+  }, [searchQuery]);
+
   const handleSearchStudent = async () => {
     if (!searchQuery.trim()) {
-      setSearchError("Please enter a student ID or email");
+      setSearchError("Please enter a student number or email");
       return;
     }
 
@@ -93,30 +113,29 @@ export function OSAFileOffenseForm() {
     setSelectedStudent(null);
 
     try {
-      // Search in students collection
-      const studentsRef = collection(db, "students");
+      // Search in student_profiles collection
+      const studentsRef = collection(db, "student_profiles");
       
-      // Try to find by studentId first
-      let q = query(studentsRef, where("studentId", "==", searchQuery.trim()));
+      // Try to find by studentNumber first
+      let q = query(studentsRef, where("studentNumber", "==", searchQuery.trim()));
       let snapshot = await getDocs(q);
       
-      // If not found by studentId, try by email
+      // If not found by studentNumber, try by email
       if (snapshot.empty) {
         q = query(studentsRef, where("email", "==", searchQuery.trim().toLowerCase()));
         snapshot = await getDocs(q);
       }
 
       if (snapshot.empty) {
-        setSearchError("Student not found. Please check the ID or email.");
+        setSearchError("Student not found. Please check the Student Number or email.");
         return;
       }
 
       const studentData = snapshot.docs[0].data();
       setSelectedStudent({
         uid: snapshot.docs[0].id,
-        studentId: studentData.studentId,
-        firstName: studentData.firstName,
-        lastName: studentData.lastName,
+        studentNumber: studentData.studentNumber,
+        fullName: studentData.fullName || studentData.name || `${studentData.firstName || ''} ${studentData.lastName || ''}`.trim(),
         email: studentData.email,
       });
       
@@ -165,8 +184,8 @@ export function OSAFileOffenseForm() {
       // Prepare offense data
       const offenseData = {
         studentUid: selectedStudent.uid,
-        studentId: selectedStudent.studentId,
-        studentName: `${selectedStudent.firstName} ${selectedStudent.lastName}`,
+        studentNumber: selectedStudent.studentNumber,
+        studentName: selectedStudent.fullName,
         studentEmail: selectedStudent.email,
         
         offenseNumber: selectedOffense.number,
@@ -191,7 +210,7 @@ export function OSAFileOffenseForm() {
       await addDoc(collection(db, "student_offenses"), offenseData);
 
       toast.success("Offense filed successfully", {
-        description: `Filed offense for ${selectedStudent.firstName} ${selectedStudent.lastName}`,
+        description: `Filed offense for ${selectedStudent.fullName}`,
       });
 
       // Reset form
@@ -219,32 +238,31 @@ export function OSAFileOffenseForm() {
       <Card>
         <CardHeader>
           <CardTitle>Select Student</CardTitle>
-          <CardDescription>Search by Student ID or Email</CardDescription>
+          <CardDescription>Search by Student Number or Email (auto-searches as you type)</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="flex gap-2">
-            <div className="flex-1">
+            <div className="flex-1 relative">
               <Input
-                placeholder="Enter Student ID or Email"
+                placeholder="Start typing student number or email..."
                 value={searchQuery}
                 onChange={(e) => setSearchQuery(e.target.value)}
                 onKeyPress={(e) => e.key === "Enter" && handleSearchStudent()}
               />
-            </div>
-            <Button onClick={handleSearchStudent} disabled={searching}>
-              {searching ? (
-                <>
-                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  Searching...
-                </>
-              ) : (
-                <>
-                  <Search className="mr-2 h-4 w-4" />
-                  Search
-                </>
+              {searching && (
+                <div className="absolute right-3 top-1/2 -translate-y-1/2">
+                  <Loader2 className="h-4 w-4 animate-spin text-gray-400" />
+                </div>
               )}
+            </div>
+            <Button onClick={handleSearchStudent} disabled={searching} variant="outline">
+              <Search className="h-4 w-4" />
             </Button>
           </div>
+          
+          {searchQuery.trim().length > 0 && searchQuery.trim().length < 3 && (
+            <p className="text-xs text-gray-500">Type at least 3 characters to auto-search...</p>
+          )}
 
           {searchError && (
             <Alert variant="destructive">
@@ -257,8 +275,8 @@ export function OSAFileOffenseForm() {
             <div className="bg-green-50 border border-green-200 rounded-lg p-4">
               <h3 className="font-semibold text-green-800 mb-2">Selected Student</h3>
               <div className="space-y-1 text-sm">
-                <p><strong>Name:</strong> {selectedStudent.firstName} {selectedStudent.lastName}</p>
-                <p><strong>Student ID:</strong> {selectedStudent.studentId}</p>
+                <p><strong>Name:</strong> {selectedStudent.fullName}</p>
+                <p><strong>Student Number:</strong> {selectedStudent.studentNumber}</p>
                 <p><strong>Email:</strong> {selectedStudent.email}</p>
               </div>
               <Button

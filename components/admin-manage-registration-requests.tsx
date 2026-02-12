@@ -20,6 +20,14 @@ export interface RegistrationRequest {
   status: "Pending" | "Accepted" | "Rejected"
   remarks?: string | null
   reviewedBy?: string | null
+  facePhotos?: {
+    neutral?: string
+    smile?: string
+    left?: string
+    right?: string
+    up?: string
+    down?: string
+  } | null
 }
 
 interface RegistrationResponse {

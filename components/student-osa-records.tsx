@@ -153,20 +153,43 @@ export default function StudentOSARecords() {
                   {/* Resolution Status */}
                   <div className="mb-4">
                     <h3 className="text-sm font-bold text-gray-800 mb-2 uppercase tracking-wide">Resolution Status</h3>
-                    <div className="flex items-center gap-2">
+                    <div className="flex items-center gap-2 mb-2">
                       <div className={`px-3 py-1 rounded text-xs font-semibold capitalize ${
                         o.status === 'resolved' 
                           ? 'bg-green-100 text-green-700' 
-                          : 'bg-yellow-100 text-yellow-700'
+                          : 'bg-red-100 text-red-700'
                       }`}>
-                        {o.status || 'pending'}
+                        {o.status === 'resolved' ? '✓ Resolved' : '⚠ Active'}
                       </div>
-                      {o.status === 'resolved' && o.dateRecorded && (
+                      {o.status === 'resolved' && o.resolvedAt && (
                         <span className="text-xs text-gray-600">
-                          Resolved on: {new Date(o.dateRecorded.toDate ? o.dateRecorded.toDate() : o.dateRecorded).toLocaleDateString()}
+                          Resolved on: {new Date(o.resolvedAt.toDate ? o.resolvedAt.toDate() : o.resolvedAt).toLocaleDateString()}
                         </span>
                       )}
                     </div>
+                    
+                    {/* Resolution Remarks if resolved */}
+                    {o.status === 'resolved' && o.resolutionRemarks && (
+                      <div className="mt-2 p-3 bg-green-50 border border-green-200 rounded">
+                        <p className="text-sm text-green-800">
+                          <strong>Resolution:</strong> {o.resolutionRemarks}
+                        </p>
+                        {o.resolvedBy && (
+                          <p className="text-xs text-green-700 mt-1">
+                            Resolved by: {o.resolvedBy}
+                          </p>
+                        )}
+                      </div>
+                    )}
+
+                    {/* Message for active offense */}
+                    {o.status === 'active' && (
+                      <div className="mt-2 p-3 bg-red-50 border border-red-200 rounded">
+                        <p className="text-sm text-red-800">
+                          <strong>Note:</strong> This offense is still active. You cannot request ID validation until this offense is resolved by the Office of Student Affairs (OSA).
+                        </p>
+                      </div>
+                    )}
                   </div>
 
                   {/* Remarks */}
