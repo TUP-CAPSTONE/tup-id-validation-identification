@@ -82,7 +82,7 @@ export function AdminNavUser() {
   const handleLogout = async () => {
     try {
       // Clear session cookie on server
-      await fetch("/api/admin/logout", {
+      await fetch("/api/auth/logout", {
         method: "POST",
         credentials: "include",
       })

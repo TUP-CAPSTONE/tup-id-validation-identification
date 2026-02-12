@@ -64,9 +64,20 @@ export function NavUser() {
 
 
   const handleLogout = async () => {
-    await signOut(auth)
-    router.replace("/clients/OSA/login")
+    try {
+      await fetch("/api/auth/logout", {
+        method: "POST",
+        credentials: "include",
+      })
+
+      // Sign out from Firebase client
+      await signOut(auth)
+      router.replace("/clients/OSA/login")
+    } catch (err) {
+      console.error("Logout error:", err)
+    }
   }
+
 
   if (!user) return null
 
