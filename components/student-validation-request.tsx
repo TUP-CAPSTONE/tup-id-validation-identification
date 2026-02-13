@@ -899,12 +899,12 @@ export default function StudentValidationRequest() {
               </div>
               
               {corFilePreview ? (
-                <div>
+                <div className="overflow-hidden">
                   <p className="text-sm font-medium text-gray-700 mb-2">Preview:</p>
                   <img 
                     src={corFilePreview} 
                     alt="COR Preview" 
-                    className="max-w-md max-h-96 rounded-lg border-2 border-green-500 object-cover" 
+                    className="w-full max-w-md max-h-96 rounded-lg border-2 border-green-500 object-cover" 
                   />
                 </div>
               ) : (
