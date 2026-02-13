@@ -6,10 +6,14 @@ import {
 
 export function DatePicker() {
   return (
-    <SidebarGroup className="w-250
-    ">
-      <SidebarGroupContent>
-        <Calendar className="[&_[role=gridcell].bg-accent]:bg-sidebar-primary [&_[role=gridcell].bg-accent]:text-sidebar-primary-foreground **:[[role=gridcell]]:w-8.25" />
+    // Changed w-250 to w-full to stay within sidebar bounds
+    // Added p-0 to prevent double padding issues
+    <SidebarGroup className="w-full p-0">
+      <SidebarGroupContent className="flex justify-center">
+        <Calendar 
+          className="w-full [&_[role=gridcell].bg-accent]:bg-sidebar-primary [&_[role=gridcell].bg-accent]:text-sidebar-primary-foreground" 
+          // Removed the broken **: syntax and used standard sizing
+        />
       </SidebarGroupContent>
     </SidebarGroup>
   )

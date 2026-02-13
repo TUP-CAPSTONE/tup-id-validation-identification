@@ -37,17 +37,17 @@ export function AppSidebar(props: React.ComponentProps<typeof Sidebar>) {
   const pathname = usePathname();
 
   return (
-    <Sidebar {...props} className="border-r border-gray-200 w-80">
+    <Sidebar {...props} className="border-r border-gray-200">
       {/* Header */}
 
       <SidebarHeader className="border-b border-gray-200 h-16 px-4 py-2 bg-white">
         <NavUser />
       </SidebarHeader>
 
-      <SidebarContent className="overflow-y-auto bg-white px-0 py-4">
+      <SidebarContent className="flex-1 overflow-y-auto bg-white px-0 py-4">
         {/* Date Picker */}
 
-        <div className="px-4 mb-3">
+        <div className="px-4 mb-3 overflow-hidden">
           <DatePicker />
         </div>
 
