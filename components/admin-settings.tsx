@@ -457,7 +457,6 @@ export function AdminSettings() {
                       placeholder="Days to extend"
                       className="w-full"
                     />
-                    <p className="text-xs text-gray-500 mt-1">Enter number of days (1-90)</p>
                   </div>
                   <Button
                     type="button"
@@ -470,6 +469,7 @@ export function AdminSettings() {
                     {extending ? "Extending..." : `Extend by ${extensionDays} Days`}
                   </Button>
                 </div>
+                <p className="text-xs text-gray-500 mt-1">Enter number of days (1-90)</p>
                 {validationPeriod.endDate && (
                   <p className="text-sm text-blue-600 mt-2">
                     New end date will be: {new Date(new Date(validationPeriod.endDate).getTime() + extensionDays * 24 * 60 * 60 * 1000).toLocaleString()}
@@ -694,7 +694,7 @@ export function AdminSettings() {
             description: `This will reset validation status for approximately ${backupInfo.totalRecords.toLocaleString()} student records. This action affects every student in the system.`,
             type: "warning",
             bullets: [
-              "Every student profile will have 'isValidated' set to false",
+              "Every student profile will have their validation status reset to 'not validated'",
               "Students will see their validation as 'pending' or 'not started'",
               "This operation is logged for audit purposes",
             ],
