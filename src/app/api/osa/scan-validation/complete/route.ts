@@ -27,21 +27,44 @@ export async function POST(req: Request) {
       })
     }
 
-    // 🔐 OSA/Admin session check
+    // 🔐 OSA-ONLY ACCESS: Only OSA accounts can scan QR codes
     const cookieStore = await cookies()
-    const adminSession = cookieStore.get("admin_session")?.value || cookieStore.get("osa_session")?.value
+    
+    // ONLY check OSA session - ignore admin session completely
+    const osaSession = cookieStore.get("osa_session")?.value
 
-    if (!adminSession) {
-      return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
+    if (!osaSession) {
+      return NextResponse.json({ 
+        error: "OSA access required. Only OSA staff can scan QR codes." 
+      }, { status: 403 })
     }
 
-    const decoded = await adminAuth.verifySessionCookie(adminSession, true)
-    const adminUserId = decoded.uid
+    const decoded = await adminAuth.verifySessionCookie(osaSession, true)
+    const osaUserId = decoded.uid
+
+    // Verify the user is actually OSA (not admin using wrong session)
+    const userDoc = await adminDB.collection("users").doc(osaUserId).get()
+    
+    if (!userDoc.exists) {
+      return NextResponse.json({ 
+        error: "User not found" 
+      }, { status: 404 })
+    }
+
+    const userData = userDoc.data()!
+    const userRole = userData.role?.toUpperCase()
+
+    // ENFORCE OSA ROLE - even if they somehow have an OSA session
+    if (userRole !== "OSA") {
+      return NextResponse.json({ 
+        error: "OSA access required. Only OSA staff can scan QR codes." 
+      }, { status: 403 })
+    }
 
     // ⚡ Rate limiting - 20 completions per minute per OSA user
     const rateLimitResult = await checkRateLimit(
       rateLimiters.completeValidation,
-      `osa:${adminUserId}:complete`
+      `osa:${osaUserId}:complete`
     )
 
     if (!rateLimitResult.success) {
@@ -60,8 +83,10 @@ export async function POST(req: Request) {
       )
     }
 
-    const adminUser = await adminAuth.getUser(adminUserId)
-    const adminName = adminUser.displayName || adminUser.email || "OSA Staff"
+    const osaUser = await adminAuth.getUser(osaUserId)
+    const osaName = osaUser.displayName || osaUser.email || "OSA Staff"
+
+    console.log(`✅ QR Scanned by OSA: ${osaName}`)
 
     // Verify QR code exists and not used
     const qrCodeRef = adminDB.collection("validation_qr_codes").doc(qrCodeId)
@@ -100,21 +125,24 @@ export async function POST(req: Request) {
     batch.update(studentProfileRef, {
       isValidated: true,
       validatedAt: FieldValue.serverTimestamp(),
-      validatedBy: adminName,
+      validatedBy: osaName,
+      validatedByRole: "osa", // Always OSA for QR scanning
     })
 
     // Mark QR code as used
     batch.update(qrCodeRef, {
       isUsed: true,
       usedAt: FieldValue.serverTimestamp(),
-      usedBy: adminName,
+      usedBy: osaName,
+      usedByRole: "osa", // Always OSA for QR scanning
     })
 
     // Create validation log (optional but recommended for audit trail)
     batch.set(adminDB.collection("validation_logs").doc(), {
       studentId,
       qrCodeId,
-      validatedBy: adminName,
+      validatedBy: osaName,
+      validatedByRole: "osa", // Always OSA for QR scanning
       validatedAt: now,
       method: "qr_scan",
     })
