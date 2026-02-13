@@ -80,6 +80,14 @@ export const rateLimiters = {
     analytics: true,
     prefix: "ratelimit:student:registration",
   }),
+
+  // Student login - 5 per minute (prevents brute force attacks)
+  studentLogin: new Ratelimit({
+    redis,
+    limiter: Ratelimit.slidingWindow(5, "1 m"),
+    analytics: true,
+    prefix: "ratelimit:student:login",
+  }),
 }
 
 // Helper function to check rate limit and return standardized response
