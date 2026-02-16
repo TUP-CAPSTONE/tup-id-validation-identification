@@ -132,7 +132,9 @@ export default function DashboardPage() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage className="text-lg">Dashboard</BreadcrumbPage>
+                <BreadcrumbPage className="text-lg font-bold">
+                Dashboard
+                </BreadcrumbPage>
               </BreadcrumbItem>
             </BreadcrumbList>
           </Breadcrumb>

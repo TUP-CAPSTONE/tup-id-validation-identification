@@ -148,7 +148,7 @@ export default function ValidationPage() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage className="text-lg">
+                <BreadcrumbPage className="text-lg font-bold">
                   ID Validation Requests
                 </BreadcrumbPage>
               </BreadcrumbItem>

@@ -6,8 +6,9 @@ import { cookies } from "next/headers"
  * POST /api/admin/new-semester
  * Start a new semester by:
  * 1. Resetting all student isValidated fields to false
- * 2. Clearing the current validation period
- * 3. Creating a backup log
+ * 2. Clearing validatedAt and validatedBy fields
+ * 3. Clearing the current validation period
+ * 4. Creating a backup log
  */
 export async function POST(req: NextRequest) {
   try {
@@ -55,6 +56,8 @@ export async function POST(req: NextRequest) {
     for (const doc of studentsSnapshot.docs) {
       batch.update(doc.ref, {
         isValidated: false,
+        validatedAt: null,
+        validatedBy: null,
         validationResetAt: new Date().toISOString(),
         validationResetBy: "new_semester",
       })

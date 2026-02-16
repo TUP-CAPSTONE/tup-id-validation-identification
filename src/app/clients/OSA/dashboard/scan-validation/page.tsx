@@ -198,7 +198,7 @@ export default function ScanValidationPage() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage className="text-lg">
+                <BreadcrumbPage className="text-lg font-bold">
                   QR Code Validation
                 </BreadcrumbPage>
               </BreadcrumbItem>

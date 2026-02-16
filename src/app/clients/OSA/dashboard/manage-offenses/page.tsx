@@ -35,7 +35,7 @@ export default function ManageOffensesPage() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage className="text-lg">
+                <BreadcrumbPage className="text-lg font-bold">
                   Manage Student Offenses
                 </BreadcrumbPage>
               </BreadcrumbItem>

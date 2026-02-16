@@ -35,7 +35,7 @@ export default function FileOffensePage() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage className="text-lg">
+                <BreadcrumbPage className="text-lg font-bold">
                   File Student Offense
                 </BreadcrumbPage>
               </BreadcrumbItem>

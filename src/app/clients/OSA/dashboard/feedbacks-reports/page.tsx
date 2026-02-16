@@ -36,7 +36,7 @@ export default function FeedbacksPage() {
           <Breadcrumb>
             <BreadcrumbList>
               <BreadcrumbItem>
-                <BreadcrumbPage className="text-lg">
+                <BreadcrumbPage className="text-lg font-bold">
                   Feedback & Reports
                 </BreadcrumbPage>
               </BreadcrumbItem>
