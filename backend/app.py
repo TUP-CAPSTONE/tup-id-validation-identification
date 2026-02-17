@@ -4,7 +4,7 @@ import subprocess
 from functools import wraps
 from flask import Flask, request, jsonify
 from flask_cors import CORS
-from dotenv import load_dotenv
+import json
 
 import numpy as np
 import faiss
@@ -13,33 +13,37 @@ from insightface.app import FaceAnalysis
 import firebase_admin
 from firebase_admin import credentials, firestore, storage
 
-# --- Load .env ---
-load_dotenv()
-INDEXER_SECRET = os.getenv("INDEXER_SECRET")
-
 # --- Flask Setup ---
 app = Flask(__name__)
 CORS(app)
 
 # --- Firebase Setup ---
-JSON_FILENAME = 'tup-id-verification-firebase-adminsdk-fbsvc-4955cf9d09.json'
 YOUR_BUCKET_NAME = 'tup-id-verification.firebasestorage.app'
-CRED_PATH = os.path.join(os.path.dirname(__file__), JSON_FILENAME)
+
+firebase_credentials_json = os.environ.get("FIREBASE_CREDENTIALS")
+cred = None
+if firebase_credentials_json:
+    try:
+        cred = credentials.Certificate(json.loads(firebase_credentials_json))
+    except json.JSONDecodeError as e:
+        print(f"Error decoding FIREBASE_CREDENTIALS: {e}")
+else:
+    print("FIREBASE_CREDENTIALS not set. Firebase will not work.")
 
 firebase_app = None
 db = None
 f_storage = None
 
-try:
-    cred = credentials.Certificate(CRED_PATH)
-    firebase_app = firebase_admin.initialize_app(cred, {
-        'storageBucket': YOUR_BUCKET_NAME
-    })
-    db = firestore.client()
-    f_storage = storage
-    print("✅ Firebase Admin SDK Initialized")
-except Exception as e:
-    print(f"❌ Firebase initialization failed: {e}")
+if cred:
+    try:
+        firebase_app = firebase_admin.initialize_app(cred, {
+            'storageBucket': YOUR_BUCKET_NAME
+        })
+        db = firestore.client()
+        f_storage = storage
+        print("✅ Firebase Admin SDK Initialized")
+    except Exception as e:
+        print(f"❌ Firebase initialization failed: {e}")
 
 # --- InsightFace Model Setup ---
 MODEL_NAME = 'antelopev2'
@@ -50,6 +54,7 @@ def get_model():
     if _model_instance is None:
         try:
             print("🟡 Initializing InsightFace model...")
+            # If you have any setup script, run it
             setup_script_path = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'models', 'deploy_setup.py')
             if os.path.exists(setup_script_path):
                 subprocess.run(["python", setup_script_path], check=True, capture_output=True)
@@ -60,6 +65,13 @@ def get_model():
             print(f"❌ Failed to initialize InsightFace model: {e}")
             raise RuntimeError("Model initialization failed.")
     return _model_instance
+
+# Preload model at startup so first request is faster
+with app.app_context():
+    try:
+        get_model()
+    except RuntimeError:
+        print("⚠️ Model failed to load at startup. Will attempt on first request.")
 
 # --- Firebase Helpers ---
 def download_student_image_content_from_firebase(gcs_file_path: str) -> bytes | None:
@@ -184,6 +196,7 @@ def shared_secret_required(f):
     @wraps(f)
     def decorated(*args, **kwargs):
         auth_header = request.headers.get('X-Admin-Key')
+        INDEXER_SECRET = os.getenv("INDEXER_SECRET")
         if auth_header != INDEXER_SECRET:
             return jsonify({"error": "Unauthorized"}), 401
         return f(*args, **kwargs)
@@ -202,7 +215,7 @@ def build_index():
     else:
         return jsonify({"error": "Failed to build FAISS Index"}), 500
 
-# --- Run Flask ---
 if __name__ == "__main__":
-    print("Starting FAISS Builder API on port 5002")
-    app.run(host="0.0.0.0", port=5002, debug=True)
+    port = int(os.environ.get("PORT", 5002))
+    print(f"Starting FAISS Builder API on port {port}")
+    app.run(host="0.0.0.0", port=port)

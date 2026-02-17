@@ -10,12 +10,15 @@ export default function AdminBuildFaiss() {
     setIsBuilding(true)
 
     try {
-      const res = await fetch("http://127.0.0.1:5002/build", {
-        method: "POST",
-        headers: {
-          "X-Admin-Key": process.env.NEXT_PUBLIC_INDEXER_SECRET || ""
+      const res = await fetch(
+        "https://backend-tup-id-validation-identification-production.up.railway.app/build",
+        {
+          method: "POST",
+          headers: {
+            "X-Admin-Key": process.env.NEXT_PUBLIC_INDEXER_SECRET || ""
+          }
         }
-      })
+      )
 
       const data = await res.json()
 
