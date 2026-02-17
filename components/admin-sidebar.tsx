@@ -147,11 +147,11 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
 
           {/* Monitoring & Feedback Section */}
           <SidebarMenuItem>
-            <Link href="/clients/admin/monitor-logs">
+            <Link href="/clients/admin/dashboard/entrance-exit-logs">
               <SidebarMenuButton
                 className={cn(
                   "rounded-md transition-colors h-12",
-                  pathname.includes("monitor-logs") 
+                  pathname.includes("entrance-exit-logs") 
                     ? "bg-blue-100 text-blue-900 hover:bg-blue-200" 
                     : "text-gray-700 hover:bg-gray-100"
                 )}

@@ -22,20 +22,13 @@ import { useRouter } from "next/navigation";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
-  Card,
-  CardContent,
-  CardDescription,
-  CardHeader,
-  CardTitle,
-} from "@/components/ui/card";
-import {
   Field,
   FieldDescription,
   FieldGroup,
   FieldLabel,
 } from "@/components/ui/field";
 import { Input } from "@/components/ui/input";
-import { Alert, AlertDescription } from "@/components/ui/alert";
+import { AlertDescription } from "@/components/ui/alert";
 
 // Firestore collection constants
 const USERS_COLLECTION = "users";
@@ -102,7 +95,7 @@ export function StudentLoginForm({
           setError(
             "This account is disabled. Contact the Admin for more information.",
           );
-          setLoading(false);
+          setCheckingAuth(false);
           return;
         }
 
@@ -125,11 +118,7 @@ export function StudentLoginForm({
     setLoading(true);
 
     try {
-      // Credentials: email as username, tup_id as password
-      // But we're using email/password authentication, so we expect:
-      // - formData.email to be the user's email
-      // - formData.password to be their TUP ID (used as password)
-
+      // First, authenticate with Firebase on the client side
       const userCredential = await signInWithEmailAndPassword(
         auth,
         formData.email.trim(),
@@ -138,69 +127,47 @@ export function StudentLoginForm({
 
       const user = userCredential.user;
 
-      // Fetch user from users collection (doc id is TUPID)
-      let userData: any = null;
-      const userQuery = query(
-        collection(db, USERS_COLLECTION),
-        where("uid", "==", user.uid),
-      );
-      const userSnap = await getDocs(userQuery);
+      // Then validate user role and status via API
+      const response = await fetch("/api/student/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          uid: user.uid,
+        }),
+      });
 
-      if (!userSnap.empty) {
-        userData = userSnap.docs[0].data();
-      } else {
-        // Fallback for older records that used UID as document id
-        const legacyRef = doc(db, USERS_COLLECTION, user.uid);
-        const legacySnap = await getDoc(legacyRef);
-        if (legacySnap.exists()) {
-          userData = legacySnap.data();
-        }
-      }
+      const data = await response.json();
 
-      if (!userData) {
+      if (!response.ok) {
+        // Sign out if validation fails
         await signOut(auth);
-        setError("User account not found. Please contact support.");
+        setError(data.error || "Login failed. Please try again.");
         setLoading(false);
         return;
       }
 
-      // Role Guard: Validate role === "student"
-      if (userData.role !== "student") {
-        await signOut(auth);
-        setError("Unauthorized Access: This login is for students only.");
-        setLoading(false);
-        return;
-      }
-
-      // Account Status Check
-      if (userData.accountStatus === "disabled") {
-        await signOut(auth);
-        setError(
-          "This account is disabled. Contact the Admin for more information.",
-        );
-        setLoading(false);
-        return;
-      }
-
-      // If role is student, onAuthStateChanged will handle redirect
-    } catch (err) {
-      const e: any = err;
-      if (e?.code === "auth/user-not-found") {
+      // If validation successful, onAuthStateChanged will handle redirect
+    } catch (err: any) {
+      console.error("Login error:", err);
+      
+      // Handle Firebase Auth errors
+      if (err?.code === "auth/user-not-found") {
         setError("User not found. Please check your credentials.");
-      } else if (e?.code === "auth/wrong-password") {
+      } else if (err?.code === "auth/wrong-password") {
         setError("Incorrect password. Please try again.");
-      } else if (e?.code === "auth/invalid-credential") {
+      } else if (err?.code === "auth/invalid-credential") {
         setError("Invalid credentials. Please try again.");
-      } else if (e?.code === "auth/user-disabled") {
+      } else if (err?.code === "auth/user-disabled") {
         setError("Your account has been disabled. Contact support.");
-      } else if (e?.code === "auth/too-many-requests") {
+      } else if (err?.code === "auth/too-many-requests") {
         setError("Too many login attempts. Please try again later.");
-      } else if (e?.code === "auth/network-request-failed") {
+      } else if (err?.code === "auth/network-request-failed") {
         setError("Network error. Please check your connection.");
       } else {
-        setError(e?.message || "Login failed. Please try again.");
+        setError(err?.message || "Login failed. Please try again.");
       }
-    } finally {
       setLoading(false);
     }
   };
@@ -210,8 +177,31 @@ export function StudentLoginForm({
     setGoogleLoading(true);
     try {
       const provider = new GoogleAuthProvider();
-      await signInWithPopup(auth, provider);
-      // onAuthStateChanged will handle redirect
+      const result = await signInWithPopup(auth, provider);
+      const user = result.user;
+
+      // Validate user role and status via API
+      const response = await fetch("/api/student/login", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          uid: user.uid,
+        }),
+      });
+
+      const data = await response.json();
+
+      if (!response.ok) {
+        // Sign out if validation fails
+        await signOut(auth);
+        setError(data.error || "Google sign-in failed. Please try again.");
+        setGoogleLoading(false);
+        return;
+      }
+
+      // If validation successful, onAuthStateChanged will handle redirect
     } catch (err) {
       const e: any = err;
       if (e?.code === "auth/popup-closed-by-user") {
@@ -230,6 +220,36 @@ export function StudentLoginForm({
 
   return (
     <div className={cn("w-full bg-white", className)} {...props}>
+      {/* Warning Banner */}
+      <div className="bg-amber-50 border-l-4 border-amber-500 p-4 mb-6 rounded-r-lg shadow-sm">
+        <div className="flex items-start">
+          <div className="flex-shrink-0">
+            <svg
+              className="h-5 w-5 text-amber-500 mt-0.5"
+              xmlns="http://www.w3.org/2000/svg"
+              viewBox="0 0 20 20"
+              fill="currentColor"
+            >
+              <path
+                fillRule="evenodd"
+                d="M8.485 2.495c.673-1.167 2.357-1.167 3.03 0l6.28 10.875c.673 1.167-.17 2.625-1.516 2.625H3.72c-1.347 0-2.189-1.458-1.515-2.625L8.485 2.495zM10 5a.75.75 0 01.75.75v3.5a.75.75 0 01-1.5 0v-3.5A.75.75 0 0110 5zm0 9a1 1 0 100-2 1 1 0 000 2z"
+                clipRule="evenodd"
+              />
+            </svg>
+          </div>
+          <div className="ml-3 flex-1">
+            <h3 className="text-sm font-semibold text-amber-800 mb-1">
+              Demonstration System Notice
+            </h3>
+            <p className="text-sm text-amber-700">
+              This system is for <strong>thesis demonstration purposes only</strong>. 
+              Please <strong>do not register or login with any important, confidential, or 
+              sensitive personal information</strong>. Use test data only.
+            </p>
+          </div>
+        </div>
+      </div>
+
       <div className="bg-white rounded-lg border border-red-100 shadow-md overflow-hidden">
         {/* Form Header Section */}
         <div className="bg-linear-to-r from-red-50 to-red-25 border-b border-red-100 px-6 md:px-8 py-8">
