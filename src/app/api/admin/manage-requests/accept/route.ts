@@ -181,7 +181,7 @@ export async function POST(req: Request) {
     })
 
     // 📩 Queue email
-    const loginUrl = process.env.APP_LOGIN_URL || "http://localhost:3000/login"
+    const loginUrl = process.env.APP_LOGIN_URL || "https://tup-id-validation-identification.vercel.app/clients/students/login"
     const html = buildAcceptanceEmailHTML({
       studentName,
       studentEmail,
