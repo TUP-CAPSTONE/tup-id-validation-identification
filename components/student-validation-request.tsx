@@ -127,7 +127,7 @@ export default function StudentValidationRequest() {
    */
   const checkValidationPeriod = async () => {
     try {
-      const response = await fetch('/api/admin/validation-period');
+      const response = await fetch('/api/validation-period');
       if (response.ok) {
         const data = await response.json();
         setValidationPeriod(data);
@@ -736,7 +736,7 @@ export default function StudentValidationRequest() {
         <Card className="border-green-200 bg-green-50">
           <CardContent className="pt-6">
             <div className="flex items-center gap-3">
-              <div className="flex-shrink-0">
+              <div className="shrink-0">
                 <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
               </div>
               <div>
