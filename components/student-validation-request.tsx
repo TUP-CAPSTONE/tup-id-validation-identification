@@ -54,6 +54,9 @@ export default function StudentValidationRequest() {
   const [activeOffenses, setActiveOffenses] = useState<any[]>([]);
   const [offenseLoading, setOffenseLoading] = useState(true);
 
+  const MAX_COR_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
+  const MAX_COR_SIZE_LABEL = "2MB";
+
   /**
    * College to Courses Mapping for TUP
    */
@@ -114,17 +117,11 @@ export default function StudentValidationRequest() {
     ]
   };
 
-  /**
-   * Get courses for the selected college
-   */
   const getCoursesForCollege = (): string[] => {
     if (!college) return [];
     return collegeCoursesMap[college] || [];
   };
 
-  /**
-   * Check validation period status
-   */
   const checkValidationPeriod = async () => {
     try {
       const response = await fetch('/api/validation-period');
@@ -148,14 +145,9 @@ export default function StudentValidationRequest() {
     }
   };
 
-  /**
-   * Check if student has any active (unresolved) offenses
-   */
   const checkActiveOffenses = async (uid: string) => {
     try {
       setOffenseLoading(true);
-      
-      // Query student_offenses collection for this student
       const offensesRef = collection(db, "student_offenses");
       const q = query(
         offensesRef, 
@@ -177,7 +169,6 @@ export default function StudentValidationRequest() {
       }
     } catch (err) {
       console.error("Error checking offenses:", err);
-      // On error, don't block - but log the error
       setActiveOffenses([]);
       setHasActiveOffense(false);
     } finally {
@@ -185,12 +176,8 @@ export default function StudentValidationRequest() {
     }
   };
 
-  /**
-   * Fetch data from API endpoints
-   */
   const fetchData = async (token: string, uid: string) => {
     try {
-      // Fetch student profile
       const profileResponse = await fetch('/api/student/profile', {
         method: 'GET',
         headers: {
@@ -206,7 +193,6 @@ export default function StudentValidationRequest() {
         }
       }
 
-      // Fetch validation request status
       const statusResponse = await fetch('/api/student/validation-request/status', {
         method: 'GET',
         headers: {
@@ -227,7 +213,6 @@ export default function StudentValidationRequest() {
   };
 
   useEffect(() => {
-    // Check validation period on mount
     checkValidationPeriod();
 
     const unsubscribe = onAuthStateChanged(auth, async (user) => {
@@ -240,11 +225,8 @@ export default function StudentValidationRequest() {
       setCurrentUser(user);
 
       try {
-        // Get ID token for API authentication
         const token = await user.getIdToken();
         setIdToken(token);
-
-        // Fetch data from APIs and check offenses in parallel
         await Promise.all([
           fetchData(token, user.uid),
           checkActiveOffenses(user.uid)
@@ -260,14 +242,31 @@ export default function StudentValidationRequest() {
   }, []);
 
   /**
-   * Handle COR file upload - convert to base64
+   * Handle COR file upload — enforces 5MB limit client-side
    */
   const handleCorUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
 
-    if (file.size > 10 * 1024 * 1024) {
-      setError('File is too large. Max 10MB.');
+    // ✅ Images only — reject PDFs and other file types
+    if (!file.type.startsWith("image/")) {
+      setError("Only image files are accepted for COR (JPG, PNG, WEBP). Please take a photo of your COR and upload it as an image.");
+      e.target.value = "";
+      return;
+    }
+
+    // ✅ 2MB client-side check
+    if (file.size > MAX_COR_SIZE_BYTES) {
+      setError(
+        `COR file is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). ` +
+        `Maximum allowed size is ${MAX_COR_SIZE_LABEL}. Please compress or resize the file and try again.`
+      );
+      // Reset input so the user can select a different file
+      e.target.value = "";
+      setCorFile(null);
+      setCorFileBase64(null);
+      setCorFilePreview(null);
+      setCorFileName(null);
       return;
     }
 
@@ -276,13 +275,11 @@ export default function StudentValidationRequest() {
       setCorFile(file);
       setCorFileName(file.name);
 
-      // Convert to base64
       const reader = new FileReader();
       reader.onload = (event) => {
         const base64 = event.target?.result as string;
         setCorFileBase64(base64);
 
-        // Generate preview for images
         if (file.type.startsWith('image/')) {
           setCorFilePreview(base64);
         } else {
@@ -297,22 +294,17 @@ export default function StudentValidationRequest() {
     }
   };
 
-  /**
-   * Submit validation request via API
-   */
   const handleSubmit = async () => {
     if (!currentUser || !idToken) {
       setError('You must be logged in');
       return;
     }
 
-    // Check validation period before submitting
     if (!validationPeriod.isActive) {
       setError('Validation period is not currently active. Please check the period status above.');
       return;
     }
 
-    // Block submission if student has active offenses
     if (hasActiveOffense) {
       setError('You cannot submit a validation request while you have unresolved offenses. Please resolve your offenses with the OSA first.');
       return;
@@ -344,7 +336,6 @@ export default function StudentValidationRequest() {
         studentProfile?.studentId ||
         'unknown';
 
-      // Call API endpoint
       const response = await fetch('/api/student/validation-request/submit', {
         method: 'POST',
         headers: {
@@ -376,8 +367,6 @@ export default function StudentValidationRequest() {
 
       if (result.success) {
         setSuccess(true);
-
-        // Reset form
         setCorFile(null);
         setCorFileBase64(null);
         setCorFilePreview(null);
@@ -403,9 +392,6 @@ export default function StudentValidationRequest() {
     }
   };
 
-  /**
-   * Go back to main dashboard
-   */
   const goBackToDashboard = () => {
     router.push('/clients/students/dashboard');
   };
@@ -434,7 +420,6 @@ export default function StudentValidationRequest() {
     );
   }
 
-  // Block validation request if student has active (unresolved) offenses
   if (hasActiveOffense && activeOffenses.length > 0) {
     return (
       <div className="w-full max-w-6xl space-y-6">
@@ -462,7 +447,7 @@ export default function StudentValidationRequest() {
               <div className="p-4 bg-white border border-red-300 rounded-lg">
                 <h4 className="font-semibold text-red-800 mb-3">Active Offense(s):</h4>
                 <div className="space-y-3">
-                  {activeOffenses.map((offense, index) => (
+                  {activeOffenses.map((offense) => (
                     <div 
                       key={offense.id} 
                       className={`p-3 rounded border ${
@@ -518,19 +503,14 @@ export default function StudentValidationRequest() {
     );
   }
 
-  // Show validation period message if not active (and no existing request or success)
   if (!validationPeriod.isActive && !existingRequest && !success) {
     const now = new Date();
     const startDate = validationPeriod.startDate ? new Date(validationPeriod.startDate) : null;
     const endDate = validationPeriod.endDate ? new Date(validationPeriod.endDate) : null;
     
     let statusType: "upcoming" | "ended" | "not-set" = "not-set";
-    
-    if (startDate && now < startDate) {
-      statusType = "upcoming";
-    } else if (endDate && now > endDate) {
-      statusType = "ended";
-    }
+    if (startDate && now < startDate) statusType = "upcoming";
+    else if (endDate && now > endDate) statusType = "ended";
 
     return (
       <div className="w-full max-w-6xl space-y-6">
@@ -555,8 +535,7 @@ export default function StudentValidationRequest() {
               "text-gray-700"
             }`}>
               {statusType === "upcoming" && <Clock className="h-5 w-5" />}
-              {statusType === "ended" && <AlertCircle className="h-5 w-5" />}
-              {statusType === "not-set" && <AlertCircle className="h-5 w-5" />}
+              {(statusType === "ended" || statusType === "not-set") && <AlertCircle className="h-5 w-5" />}
               ID Validation {statusType === "upcoming" ? "Coming Soon" : statusType === "ended" ? "Closed" : "Unavailable"}
             </CardTitle>
           </CardHeader>
@@ -569,11 +548,8 @@ export default function StudentValidationRequest() {
                 : "bg-gray-50 border-gray-200"
             }`}>
               <p className={`${
-                statusType === "upcoming" 
-                  ? "text-blue-800" 
-                  : statusType === "ended"
-                  ? "text-amber-800"
-                  : "text-gray-800"
+                statusType === "upcoming" ? "text-blue-800" : 
+                statusType === "ended" ? "text-amber-800" : "text-gray-800"
               }`}>
                 {validationPeriod.message}
               </p>
@@ -582,12 +558,8 @@ export default function StudentValidationRequest() {
                 <div className="mt-4 pt-4 border-t border-blue-200">
                   <p className="text-sm text-blue-700">
                     <strong>Opens on:</strong> {startDate.toLocaleString('en-US', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: 'numeric',
-                      minute: '2-digit',
+                      weekday: 'long', year: 'numeric', month: 'long',
+                      day: 'numeric', hour: 'numeric', minute: '2-digit',
                     })}
                   </p>
                 </div>
@@ -597,12 +569,8 @@ export default function StudentValidationRequest() {
                 <div className="mt-4 pt-4 border-t border-amber-200">
                   <p className="text-sm text-amber-700">
                     <strong>Ended on:</strong> {endDate.toLocaleString('en-US', {
-                      weekday: 'long',
-                      year: 'numeric',
-                      month: 'long',
-                      day: 'numeric',
-                      hour: 'numeric',
-                      minute: '2-digit',
+                      weekday: 'long', year: 'numeric', month: 'long',
+                      day: 'numeric', hour: 'numeric', minute: '2-digit',
                     })}
                   </p>
                 </div>
@@ -614,7 +582,6 @@ export default function StudentValidationRequest() {
     );
   }
 
-  // Show existing request status
   if (existingRequest && !success && !showResubmitForm) {
     return (
       <div className="w-full max-w-6xl space-y-6">
@@ -649,7 +616,6 @@ export default function StudentValidationRequest() {
             </CardDescription>
           </CardHeader>
           
-          {/* Show rejection remarks if rejected */}
           {existingRequest.status === 'rejected' && existingRequest.rejectRemarks && (
             <CardContent>
               <div className="p-4 bg-red-100 border border-red-300 rounded-md">
@@ -657,7 +623,6 @@ export default function StudentValidationRequest() {
                 <p className="text-red-700">{existingRequest.rejectRemarks}</p>
               </div>
               
-              {/* Only show resubmit button if validation period is active */}
               {validationPeriod.isActive ? (
                 <Button
                   onClick={() => setShowResubmitForm(true)}
@@ -678,7 +643,6 @@ export default function StudentValidationRequest() {
             </CardContent>
           )}
 
-          {/* Show message if accepted - no action button */}
           {existingRequest.status === 'accepted' && (
             <CardContent>
               <p className="text-green-700 font-semibold">
@@ -694,7 +658,6 @@ export default function StudentValidationRequest() {
     );
   }
 
-  // Success message
   if (success) {
     return (
       <div className="w-full max-w-6xl space-y-6">
@@ -721,7 +684,6 @@ export default function StudentValidationRequest() {
 
   return (
     <div className="w-full max-w-6xl space-y-6">
-      {/* Back Button */}
       <Button 
         variant="outline" 
         onClick={goBackToDashboard}
@@ -731,7 +693,6 @@ export default function StudentValidationRequest() {
         Back to Dashboard
       </Button>
 
-      {/* Validation Period Status Banner */}
       {validationPeriod.isActive && (
         <Card className="border-green-200 bg-green-50">
           <CardContent className="pt-6">
@@ -798,10 +759,7 @@ export default function StudentValidationRequest() {
               <label className="block text-sm font-medium text-gray-700 mb-2">College *</label>
               <select
                 value={college}
-                onChange={(e) => {
-                  setCollege(e.target.value);
-                  setCourse('');
-                }}
+                onChange={(e) => { setCollege(e.target.value); setCourse(''); }}
                 className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
               >
                 <option value="">Select College</option>
@@ -820,17 +778,11 @@ export default function StudentValidationRequest() {
                 value={course}
                 onChange={(e) => setCourse(e.target.value)}
                 disabled={!college}
-                className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 ${
-                  !college ? 'bg-gray-100 cursor-not-allowed' : ''
-                }`}
+                className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 ${!college ? 'bg-gray-100 cursor-not-allowed' : ''}`}
               >
-                <option value="">
-                  {!college ? 'Select a college first' : 'Select Course'}
-                </option>
+                <option value="">{!college ? 'Select a college first' : 'Select Course'}</option>
                 {getCoursesForCollege().map((courseOption) => (
-                  <option key={courseOption} value={courseOption}>
-                    {courseOption}
-                  </option>
+                  <option key={courseOption} value={courseOption}>{courseOption}</option>
                 ))}
               </select>
             </div>
@@ -876,12 +828,13 @@ export default function StudentValidationRequest() {
       <Card className="border-red-200">
         <CardHeader className="bg-red-50">
           <CardTitle className="text-red-700">Certificate of Registration (COR)</CardTitle>
-          <CardDescription>Upload your COR document (Image or PDF, max 10MB)</CardDescription>
+          {/* ✅ Updated description to reflect 5MB limit */}
+          <CardDescription>Upload a photo of your COR (JPG, PNG, WEBP only — max {MAX_COR_SIZE_LABEL})</CardDescription>
         </CardHeader>
         <CardContent className="pt-6 space-y-4">
           <input
             type="file"
-            accept=".pdf,image/*"
+            accept="image/*"
             onChange={handleCorUpload}
             className="block w-full text-sm text-gray-500 
               file:mr-4 file:py-2 file:px-4 
@@ -891,11 +844,19 @@ export default function StudentValidationRequest() {
               hover:file:bg-blue-100 
               cursor-pointer"
           />
+          {/* ✅ Inline size hint */}
+          <p className="text-xs text-gray-500">
+            Maximum file size: {MAX_COR_SIZE_LABEL}. Accepted formats: JPG, PNG, WEBP.
+          </p>
           {corFile && (
             <div className="space-y-3">
               <div className="flex items-center gap-2 text-sm text-green-600">
                 <span>✅ COR uploaded</span>
-                {corFileName && <span className="text-gray-600">({corFileName})</span>}
+                {corFileName && (
+                  <span className="text-gray-600">
+                    ({corFileName} — {(corFile.size / (1024 * 1024)).toFixed(1)}MB)
+                  </span>
+                )}
               </div>
               
               {corFilePreview ? (
@@ -933,15 +894,10 @@ export default function StudentValidationRequest() {
             onCapture={setIdPhoto}
             useBackCamera={true}
           />
-          
           {idPhoto && (
             <div className="mt-4">
               <p className="text-green-600 font-semibold mb-3">✅ ID Photo Captured!</p>
-              <img 
-                src={idPhoto} 
-                alt="ID" 
-                className="w-80 h-80 object-cover rounded-lg border-2 border-green-500" 
-              />
+              <img src={idPhoto} alt="ID" className="w-80 h-80 object-cover rounded-lg border-2 border-green-500" />
             </div>
           )}
         </CardContent>
@@ -955,64 +911,27 @@ export default function StudentValidationRequest() {
         </CardHeader>
         <CardContent className="pt-6">
           <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-            
-            {/* Front */}
             <div className="space-y-3">
               <h3 className="font-semibold text-gray-900 text-center">Front View</h3>
               <div className="flex flex-col items-center">
-                <WebcamCapture
-                  label={faceFront ? "Retake" : "Front"}
-                  onCapture={setFaceFront}
-                  useBackCamera={false}
-                />
-                {faceFront && (
-                  <img 
-                    src={faceFront} 
-                    alt="Front" 
-                    className="mt-4 w-full max-w-xs h-48 object-cover rounded-lg border-2 border-green-500" 
-                  />
-                )}
+                <WebcamCapture label={faceFront ? "Retake" : "Front"} onCapture={setFaceFront} useBackCamera={false} />
+                {faceFront && <img src={faceFront} alt="Front" className="mt-4 w-full max-w-xs h-48 object-cover rounded-lg border-2 border-green-500" />}
               </div>
             </div>
-
-            {/* Left */}
             <div className="space-y-3">
               <h3 className="font-semibold text-gray-900 text-center">Left View</h3>
               <div className="flex flex-col items-center">
-                <WebcamCapture
-                  label={faceLeft ? "Retake" : "Left"}
-                  onCapture={setFaceLeft}
-                  useBackCamera={false}
-                />
-                {faceLeft && (
-                  <img 
-                    src={faceLeft} 
-                    alt="Left" 
-                    className="mt-4 w-full max-w-xs h-48 object-cover rounded-lg border-2 border-green-500" 
-                  />
-                )}
+                <WebcamCapture label={faceLeft ? "Retake" : "Left"} onCapture={setFaceLeft} useBackCamera={false} />
+                {faceLeft && <img src={faceLeft} alt="Left" className="mt-4 w-full max-w-xs h-48 object-cover rounded-lg border-2 border-green-500" />}
               </div>
             </div>
-
-            {/* Right */}
             <div className="space-y-3">
               <h3 className="font-semibold text-gray-900 text-center">Right View</h3>
               <div className="flex flex-col items-center">
-                <WebcamCapture
-                  label={faceRight ? "Retake" : "Right"}
-                  onCapture={setFaceRight}
-                  useBackCamera={false}
-                />
-                {faceRight && (
-                  <img 
-                    src={faceRight} 
-                    alt="Right" 
-                    className="mt-4 w-full max-w-xs h-48 object-cover rounded-lg border-2 border-green-500" 
-                  />
-                )}
+                <WebcamCapture label={faceRight ? "Retake" : "Right"} onCapture={setFaceRight} useBackCamera={false} />
+                {faceRight && <img src={faceRight} alt="Right" className="mt-4 w-full max-w-xs h-48 object-cover rounded-lg border-2 border-green-500" />}
               </div>
             </div>
-
           </div>
         </CardContent>
       </Card>
@@ -1025,26 +944,18 @@ export default function StudentValidationRequest() {
         </CardHeader>
         <CardContent className="pt-6 space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
-            <div className={`flex items-center gap-3 p-3 rounded-lg border ${corFileBase64 ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
-              <span className="text-2xl">{corFileBase64 ? "✅" : "⬜"}</span>
-              <span className="font-medium">COR</span>
-            </div>
-            <div className={`flex items-center gap-3 p-3 rounded-lg border ${idPhoto ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
-              <span className="text-2xl">{idPhoto ? "✅" : "⬜"}</span>
-              <span className="font-medium">ID Photo</span>
-            </div>
-            <div className={`flex items-center gap-3 p-3 rounded-lg border ${faceFront ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
-              <span className="text-2xl">{faceFront ? "✅" : "⬜"}</span>
-              <span className="font-medium">Front</span>
-            </div>
-            <div className={`flex items-center gap-3 p-3 rounded-lg border ${faceLeft ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
-              <span className="text-2xl">{faceLeft ? "✅" : "⬜"}</span>
-              <span className="font-medium">Left</span>
-            </div>
-            <div className={`flex items-center gap-3 p-3 rounded-lg border ${faceRight ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
-              <span className="text-2xl">{faceRight ? "✅" : "⬜"}</span>
-              <span className="font-medium">Right</span>
-            </div>
+            {[
+              { label: "COR", done: !!corFileBase64 },
+              { label: "ID Photo", done: !!idPhoto },
+              { label: "Front", done: !!faceFront },
+              { label: "Left", done: !!faceLeft },
+              { label: "Right", done: !!faceRight },
+            ].map(({ label, done }) => (
+              <div key={label} className={`flex items-center gap-3 p-3 rounded-lg border ${done ? "bg-green-50 border-green-200" : "bg-gray-50 border-gray-200"}`}>
+                <span className="text-2xl">{done ? "✅" : "⬜"}</span>
+                <span className="font-medium">{label}</span>
+              </div>
+            ))}
           </div>
           
           <Button
