@@ -123,17 +123,27 @@ export async function POST(req: Request) {
       )
     }
 
-    // ✅ Create Auth user (this is the only heavy part we cannot avoid)
+    // Extract face photos from the registration request
+    const facePhotos: Record<string, string> = {}
+    if (data.facePhotos && typeof data.facePhotos === "object") {
+      const keys = ["neutral", "smile", "left", "right", "up", "down"] as const
+      for (const key of keys) {
+        if (data.facePhotos[key]) {
+          facePhotos[key] = data.facePhotos[key]
+        }
+      }
+    }
+
+    // ✅ Create Auth user
     const userRecord = await adminAuth.createUser({
       email: studentEmail,
       password: tupId,
       displayName: studentName,
     })
 
-    const studentDocId = tupId
     const now = new Date()
 
-    // 🚀 Batch writes (fast)
+    // 🚀 Batch writes
     const batch = adminDB.batch()
 
     batch.set(adminDB.collection("users").doc(userRecord.uid), {
@@ -159,6 +169,8 @@ export async function POST(req: Request) {
       createdAt: now,
       isOnboarded: false,
       isValidated: false,
+      // Save face photo URLs from enrollment_images
+      facePhotos: Object.keys(facePhotos).length > 0 ? facePhotos : null,
     })
 
     batch.update(requestRef, {
@@ -168,7 +180,7 @@ export async function POST(req: Request) {
       processedAt: now,
     })
 
-    // 📩 Queue email via Trigger Email extension
+    // 📩 Queue email
     const loginUrl = process.env.APP_LOGIN_URL || "http://localhost:3000/login"
     const html = buildAcceptanceEmailHTML({
       studentName,
@@ -191,7 +203,6 @@ export async function POST(req: Request) {
   } catch (error: any) {
     console.error("🔥 ACCEPT ERROR:", error)
 
-    // better error message for duplicate email
     if (String(error?.message || "").includes("email-already-exists")) {
       return NextResponse.json(
         { error: "Email already exists in authentication" },
