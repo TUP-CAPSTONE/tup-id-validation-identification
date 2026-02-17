@@ -41,23 +41,13 @@ export default function AdminValidationPage() {
         pageSize: newPageSize.toString(),
       })
 
-      if (cursor) {
-        params.append("lastRequestId", cursor)
-      }
+      if (cursor) params.append("lastRequestId", cursor)
+      if (newStatus) params.append("status", newStatus)
+      if (newSortBy) params.append("sortBy", newSortBy)
+      if (newSortOrder) params.append("sortOrder", newSortOrder)
 
-      if (newStatus) {
-        params.append("status", newStatus)
-      }
-
-      if (newSortBy) {
-        params.append("sortBy", newSortBy)
-      }
-
-      if (newSortOrder) {
-        params.append("sortOrder", newSortOrder)
-      }
-
-      const response = await fetch(`/api/osa/validation-requests?${params.toString()}`)
+      // ✅ Uses admin-specific route — verified by admin_session cookie server-side
+      const response = await fetch(`/api/admin/validation-requests?${params.toString()}`)
 
       if (!response.ok) {
         if (response.status === 429) {
@@ -67,11 +57,11 @@ export default function AdminValidationPage() {
           })
           return
         }
-        
+
         const errorText = await response.text()
         console.error("API Error Response:", errorText)
         console.error("Status:", response.status)
-        
+
         toast.error("Error", {
           description: `Failed to fetch validation requests (Status: ${response.status})`,
         })
@@ -117,7 +107,6 @@ export default function AdminValidationPage() {
   }
 
   const handleUpdate = () => {
-    // Refresh the current page
     fetchRequests(null, pageSize, statusFilter, sortBy, sortOrder)
   }
 
