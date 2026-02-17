@@ -47,7 +47,7 @@ export default function AdminValidationPage() {
       if (newSortOrder) params.append("sortOrder", newSortOrder)
 
       // ✅ Uses admin-specific route — verified by admin_session cookie server-side
-      const response = await fetch(`/api/admin/validation-requests?${params.toString()}`)
+      const response = await fetch(`/api/admin/validation-request?${params.toString()}`)
 
       if (!response.ok) {
         if (response.status === 429) {
