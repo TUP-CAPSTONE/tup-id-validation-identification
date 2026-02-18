@@ -95,12 +95,12 @@ function FeatureCard({
    (note the leading slash, and NO "public" in the path)
 ───────────────────────────────────────────── */
 const TEAM_MEMBERS = [
-  { name: "Xyrus Dylan Folloso", role: "Project Lead",       src: "/team/member1.jpg" },
-  { name: "Marlon Kyle Delizo", role: "Backend Developer",  src: "/team/member2.jpg" },
-  { name: "Xander Lou Abion", role: "Frontend Developer", src: "/team/member3.jpg" },
-  { name: "Jaekob Rajan Tecson", role: "UI/UX Designer",     src: "/team/member4.jpg" },
-  { name: "Harvey Vinuya", role: "Database Admin",     src: "/team/member5.jpg" },
-  { name: "Zoren Acab", role: "QA & Testing",       src: "/team/member6.jpg" },
+  { name: "Marlon Kyle Delizo", role: "Project Lead",       src: "/team/member1.jpg" },
+  { name: "Xyrus Dylan Folloso", role: "Web Developer",  src: "/team/member2.jpg" },
+  { name: "Xander Lou Abion", role: "Web Developer", src: "/team/member3.jpg" },
+  { name: "Jaekob Rajan Tecson", role: "Web Developer",     src: "/team/member4.jpg" },
+  { name: "Harvey Vinuya", role: "Machine Learning Dev",     src: "/team/member5.jpg" },
+  { name: "Zoren Acab", role: "Research Lead",       src: "/team/member6.jpg" },
 ];
 
 function TeamCard({
