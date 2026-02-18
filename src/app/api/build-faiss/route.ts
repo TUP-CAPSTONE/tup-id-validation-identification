@@ -6,7 +6,7 @@ export const POST = async (req: NextRequest) => {
 
     const INDEXER_SECRET = process.env.NEXT_PUBLIC_INDEXER_SECRET;
 
-    const res = await fetch("http://127.0.0.1:5002/build", {
+    const res = await fetch("https://backend-tup-id-validation-identification-production.up.railway.app/build", {
       method: "POST",
       headers: {
         "X-Admin-Key": INDEXER_SECRET!,
