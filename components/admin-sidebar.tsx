@@ -14,6 +14,7 @@ import {
   LayoutDashboard,
   Settings,
   RefreshCw,
+  Database,
 } from "lucide-react"
 
 import { AdminNavUser } from "@/components/admin-nav-user";
@@ -179,6 +180,23 @@ export function AdminSidebar({ ...props }: React.ComponentProps<typeof Sidebar>)
           </SidebarMenuItem>
 
           <SidebarSeparator className="mx-0 my-3" />
+
+          {/* Build FAISS Index */}
+          <SidebarMenuItem>
+            <Link href="/clients/admin/dashboard/build-faiss">
+              <SidebarMenuButton
+                className={cn(
+                  "rounded-md transition-colors h-12",
+                  pathname.includes("build-faiss") 
+                    ? "bg-blue-100 text-blue-900 hover:bg-blue-200" 
+                    : "text-gray-700 hover:bg-gray-100"
+                )}
+              >
+                <Database className="w-5 h-5" />
+                <span className="font-medium text-base">Build FAISS Index</span>
+              </SidebarMenuButton>
+            </Link>
+          </SidebarMenuItem>
 
           {/* System Settings */}
           <SidebarMenuItem>
