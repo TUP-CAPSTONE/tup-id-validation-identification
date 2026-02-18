@@ -115,10 +115,16 @@ export async function POST(req: Request) {
       registerUrl,
     })
 
-    // 🚀 batch update + queue email + delete request doc
     const batch = adminDB.batch()
 
-    // queue email
+    // ✅ 1. Update the original registration_requests document status to "rejected"
+    batch.update(requestRef, {
+      status: "rejected",
+      remarks: remarks,
+      processedAt: now,
+    })
+
+    // ✅ 2. Queue rejection email
     batch.set(adminDB.collection("mail").doc(), {
       to: studentEmail,
       message: {
@@ -127,11 +133,11 @@ export async function POST(req: Request) {
       },
     })
 
-    // (optional audit: store rejected copy before delete)
+    // ✅ 3. (Optional) Archive a copy in rejected_requests collection for audit trail
     batch.set(adminDB.collection("rejected_requests").doc(), {
       originalRequestId: requestId,
       ...data,
-      status: "Rejected",
+      status: "rejected",
       remarks,
       processedAt: now,
     })
