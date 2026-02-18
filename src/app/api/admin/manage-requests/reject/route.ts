@@ -107,7 +107,7 @@ export async function POST(req: Request) {
     const now = new Date()
 
     const registerUrl =
-      process.env.APP_REGISTER_URL || "http://localhost:3000/register"
+      process.env.APP_REGISTER_URL || "https://tup-id-validation-identification.vercel.app/clients/students/register"
 
     const html = buildRejectionEmailHTML({
       studentName,
