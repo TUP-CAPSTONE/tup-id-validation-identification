@@ -5,9 +5,10 @@ import { useRouter } from "next/navigation";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import WebcamCapture from '@/components/webcam-capture';
-import { auth, db } from "@/lib/firebaseConfig";
+import { auth, db, storage } from "@/lib/firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
 import { collection, query, where, getDocs } from "firebase/firestore";
+import { ref, uploadBytes, getDownloadURL } from "firebase/storage";
 import { ArrowLeft, Clock, AlertCircle, Ban } from "lucide-react";
 
 export default function StudentValidationRequest() {
@@ -32,7 +33,6 @@ export default function StudentValidationRequest() {
   const [periodLoading, setPeriodLoading] = useState(true);
   
   const [corFile, setCorFile] = useState<File | null>(null);
-  const [corFileBase64, setCorFileBase64] = useState<string | null>(null);
   const [corFilePreview, setCorFilePreview] = useState<string | null>(null);
   const [corFileName, setCorFileName] = useState<string | null>(null);
   const [idPhoto, setIdPhoto] = useState<string | null>(null);
@@ -54,8 +54,8 @@ export default function StudentValidationRequest() {
   const [activeOffenses, setActiveOffenses] = useState<any[]>([]);
   const [offenseLoading, setOffenseLoading] = useState(true);
 
-  const MAX_COR_SIZE_BYTES = 2 * 1024 * 1024; // 2MB
-  const MAX_COR_SIZE_LABEL = "2MB";
+  const MAX_COR_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
+  const MAX_COR_SIZE_LABEL = "10MB";
 
   /**
    * College to Courses Mapping for TUP
@@ -242,8 +242,38 @@ export default function StudentValidationRequest() {
   }, []);
 
   /**
-   * Handle COR file upload — enforces 5MB limit client-side
+  /**
+   * Upload image to Firebase Storage and return download URL
    */
+  const uploadImageToStorage = async (
+    dataUrl: string,
+    fileName: string,
+    uid: string,
+    imageType: 'cor' | 'id' | 'face'
+  ): Promise<string> => {
+    console.log(`📤 Uploading ${imageType} image: ${fileName}`);
+
+    // Convert data URL to blob
+    const response = await fetch(dataUrl);
+    const blob = await response.blob();
+
+    // Create a unique filename with timestamp
+    const timestamp = Date.now();
+    const uniqueFileName = `${uid}-${imageType}-${timestamp}-${fileName}`;
+    const storageRef = ref(storage, `validation-requests/${uid}/${uniqueFileName}`);
+
+    // Upload to Firebase Storage
+    await uploadBytes(storageRef, blob);
+    const downloadURL = await getDownloadURL(storageRef);
+    console.log(`✅ ${imageType} image uploaded: ${downloadURL}`);
+
+    return downloadURL;
+  };
+
+  /**
+   * Handle COR file upload — enforces 10MB limit client-side
+   */
+
   const handleCorUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0];
     if (!file) return;
@@ -255,7 +285,7 @@ export default function StudentValidationRequest() {
       return;
     }
 
-    // ✅ 2MB client-side check
+    // ✅ 10MB client-side check
     if (file.size > MAX_COR_SIZE_BYTES) {
       setError(
         `COR file is too large (${(file.size / (1024 * 1024)).toFixed(1)}MB). ` +
@@ -264,7 +294,6 @@ export default function StudentValidationRequest() {
       // Reset input so the user can select a different file
       e.target.value = "";
       setCorFile(null);
-      setCorFileBase64(null);
       setCorFilePreview(null);
       setCorFileName(null);
       return;
@@ -275,13 +304,12 @@ export default function StudentValidationRequest() {
       setCorFile(file);
       setCorFileName(file.name);
 
+      // Create a preview URL without base64 encoding
       const reader = new FileReader();
       reader.onload = (event) => {
-        const base64 = event.target?.result as string;
-        setCorFileBase64(base64);
-
+        const preview = event.target?.result as string;
         if (file.type.startsWith('image/')) {
-          setCorFilePreview(base64);
+          setCorFilePreview(preview);
         } else {
           setCorFilePreview(null);
         }
@@ -310,7 +338,7 @@ export default function StudentValidationRequest() {
       return;
     }
 
-    if (!corFileBase64 || !idPhoto || !faceFront || !faceLeft || !faceRight) {
+    if (!corFile || !corFilePreview || !idPhoto || !faceFront || !faceLeft || !faceRight) {
       setError('Please complete all required fields and captures');
       return;
     }
@@ -336,6 +364,47 @@ export default function StudentValidationRequest() {
         studentProfile?.studentId ||
         'unknown';
 
+      console.log('📤 Starting image uploads to Firebase Storage...');
+
+      // Upload all images to Firebase Storage
+      const corUrl = await uploadImageToStorage(
+        corFilePreview,
+        corFile.name,
+        currentUser.uid,
+        'cor'
+      );
+
+      const idPhotoUrl = await uploadImageToStorage(
+        idPhoto,
+        'id-photo.jpg',
+        currentUser.uid,
+        'id'
+      );
+
+      const faceFrontUrl = await uploadImageToStorage(
+        faceFront,
+        'face-front.jpg',
+        currentUser.uid,
+        'face'
+      );
+
+      const faceLeftUrl = await uploadImageToStorage(
+        faceLeft,
+        'face-left.jpg',
+        currentUser.uid,
+        'face'
+      );
+
+      const faceRightUrl = await uploadImageToStorage(
+        faceRight,
+        'face-right.jpg',
+        currentUser.uid,
+        'face'
+      );
+
+      console.log('✅ All images uploaded successfully');
+      console.log('📤 Submitting validation request...');
+
       const response = await fetch('/api/student/validation-request/submit', {
         method: 'POST',
         headers: {
@@ -350,12 +419,11 @@ export default function StudentValidationRequest() {
           course: course.trim(),
           section: section.trim(),
           yearLevel: yearLevel.trim(),
-          corFile: corFileBase64,
-          corFileName: corFileName,
-          idPhoto,
-          faceFront,
-          faceLeft,
-          faceRight,
+          corUrl,
+          idPhotoUrl,
+          faceFrontUrl,
+          faceLeftUrl,
+          faceRightUrl,
         }),
       });
 
@@ -368,7 +436,6 @@ export default function StudentValidationRequest() {
       if (result.success) {
         setSuccess(true);
         setCorFile(null);
-        setCorFileBase64(null);
         setCorFilePreview(null);
         setCorFileName(null);
         setIdPhoto(null);
@@ -680,7 +747,7 @@ export default function StudentValidationRequest() {
     );
   }
 
-  const allCaptured = corFileBase64 && idPhoto && faceFront && faceLeft && faceRight && course.trim() && section.trim() && yearLevel.trim();
+  const allCaptured = corFilePreview && idPhoto && faceFront && faceLeft && faceRight && course.trim() && section.trim() && yearLevel.trim();
 
   return (
     <div className="w-full max-w-6xl space-y-6">
@@ -945,7 +1012,7 @@ export default function StudentValidationRequest() {
         <CardContent className="pt-6 space-y-6">
           <div className="grid grid-cols-2 md:grid-cols-3 gap-4">
             {[
-              { label: "COR", done: !!corFileBase64 },
+              { label: "COR", done: !!corFilePreview },
               { label: "ID Photo", done: !!idPhoto },
               { label: "Front", done: !!faceFront },
               { label: "Left", done: !!faceLeft },
