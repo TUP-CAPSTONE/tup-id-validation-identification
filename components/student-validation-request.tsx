@@ -491,7 +491,7 @@ export default function StudentValidationRequest() {
 
               <Button
                 variant="outline"
-                onClick={() => router.push('/clients/students/osa-records')}
+                onClick={() => router.push('/clients/students/dashboard/osa-records')}
                 className="w-full border-red-200 hover:bg-red-100"
               >
                 View My Full OSA Records
