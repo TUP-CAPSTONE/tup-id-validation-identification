@@ -678,7 +678,7 @@ export default function StudentValidationRequest() {
             </CardTitle>
             <CardDescription>
               {existingRequest.status === 'pending' && 'Your validation request is being reviewed.'}
-              {existingRequest.status === 'accepted' && 'Your ID has been validated!'}
+              {existingRequest.status === 'accepted' && 'Your ID Validation Request has been accepted!'}
               {existingRequest.status === 'rejected' && 'Your request was rejected. Please review the reason and submit a new request.'}
             </CardDescription>
           </CardHeader>
@@ -716,7 +716,7 @@ export default function StudentValidationRequest() {
                 ✓ Your ID validation has been accepted. You cannot submit another request.
               </p>
               <p className="text-green-600 mt-2">
-                You can proceed with your application.
+                You can proceed with the next steps of your application.
               </p>
             </CardContent>
           )}
