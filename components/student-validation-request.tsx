@@ -716,7 +716,7 @@ export default function StudentValidationRequest() {
                 ✓ Your ID validation has been accepted. You cannot submit another request.
               </p>
               <p className="text-green-600 mt-2">
-                You can proceed with the next steps of your application.
+                Follow the instructions in your email. You can proceed with the next steps of your application.
               </p>
             </CardContent>
           )}
