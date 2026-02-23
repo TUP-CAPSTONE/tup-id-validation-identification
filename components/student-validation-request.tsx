@@ -426,6 +426,7 @@ export default function StudentValidationRequest() {
           studentName: fullName,
           email: currentUser.email,
           phoneNumber: studentProfile?.phone || studentProfile?.student_phone_num || '',
+          college: college.trim(),
           course: course.trim(),
           section: section.trim(),
           yearLevel: yearLevel.trim(),
