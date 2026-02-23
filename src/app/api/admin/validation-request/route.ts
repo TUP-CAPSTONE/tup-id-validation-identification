@@ -142,6 +142,7 @@ export async function GET(request: NextRequest) {
         email: docData.email,
         phoneNumber: docData.phoneNumber,
         course: docData.course || "",
+        college: docData.college || "",
         section: docData.section || "",
         yearLevel: docData.yearLevel || "",
         idPicture: docData.idPicture,

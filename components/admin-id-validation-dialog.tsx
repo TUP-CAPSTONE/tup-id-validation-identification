@@ -21,6 +21,8 @@ interface Props {
   onClose: () => void
   request: ValidationRequest | null
   onUpdate: () => void
+  onAcceptSuccess: () => void
+  onRejectSuccess: () => void
 }
 
 export function AdminIdValidationDialog({
@@ -28,6 +30,8 @@ export function AdminIdValidationDialog({
   onClose,
   request,
   onUpdate,
+  onAcceptSuccess,
+  onRejectSuccess,
 }: Props) {
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [previewTitle, setPreviewTitle] = useState("")
@@ -35,7 +39,6 @@ export function AdminIdValidationDialog({
   const [rejectRemarks, setRejectRemarks] = useState("")
   const [processing, setProcessing] = useState(false)
 
-  // Clear preview when dialog closes
   useEffect(() => {
     if (!open) {
       setPreviewImage(null)
@@ -43,18 +46,13 @@ export function AdminIdValidationDialog({
     }
   }, [open])
 
-  // Preload images
   useEffect(() => {
     if (!request) return
-
     const images = [
       request.idPicture,
       request.corFile,
-      ...(request.selfiePictures
-        ? Object.values(request.selfiePictures)
-        : []),
+      ...(request.selfiePictures ? Object.values(request.selfiePictures) : []),
     ].filter(Boolean) as string[]
-
     images.forEach((src) => {
       const img = new window.Image()
       img.src = src
@@ -75,12 +73,58 @@ export function AdminIdValidationDialog({
 
   if (!request) return null
 
-  const isFinalized =
-    request.status === "accepted" || request.status === "rejected"
+  const isFinalized = request.status === "accepted" || request.status === "rejected"
 
   const openPreview = (img: string, title: string) => {
     setPreviewImage(img)
     setPreviewTitle(title)
+  }
+
+  const handleAccept = async () => {
+    setProcessing(true)
+    try {
+      const resolvedId = request.id ?? request.requestId
+      const res = await fetch("/api/admin/id-validation/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: resolvedId }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Request approved successfully")
+      onAcceptSuccess() // 🎉 triggers confetti + sound in the page
+      onUpdate()
+      onClose()
+    } catch {
+      toast.error("Failed to approve request")
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const handleReject = async () => {
+    setProcessing(true)
+    try {
+      const resolvedId = request.id ?? request.requestId
+      const res = await fetch("/api/admin/id-validation/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId: resolvedId,
+          rejectRemarks: rejectRemarks.trim(),
+        }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Request rejected successfully")
+      onRejectSuccess() // 🚨 triggers red flash + sound in the page
+      setShowRejectDialog(false)
+      setRejectRemarks("")
+      onUpdate()
+      onClose()
+    } catch {
+      toast.error("Failed to reject request")
+    } finally {
+      setProcessing(false)
+    }
   }
 
   return (
@@ -93,12 +137,8 @@ export function AdminIdValidationDialog({
           onEscapeKeyDown={(e) => e.preventDefault()}
           onPointerDownOutside={(e) => e.preventDefault()}
         >
-          {/* Main Form Card - Fixed Width */}
           <div className="relative w-full">
-            
-            {/* 1. ACTUAL FORM CARD */}
             <div className="w-full max-h-[85vh] flex flex-col overflow-hidden rounded-lg border bg-background shadow-lg">
-              {/* Header */}
               <div className="p-6 pb-2">
                 <DialogHeader className="flex flex-row items-center justify-between space-y-0">
                   <DialogTitle>ID Validation Review (Admin)</DialogTitle>
@@ -114,9 +154,7 @@ export function AdminIdValidationDialog({
                 </DialogHeader>
               </div>
 
-              {/* Scrollable Content Area */}
               <div className="flex-1 overflow-y-auto p-6 pt-2">
-                {/* STUDENT INFO */}
                 <div className="grid grid-cols-2 gap-4 text-sm mt-2">
                   <Info label="Student Name" value={request.studentName} />
                   <Info label="Requested At" value={formattedRequestedAt} />
@@ -124,6 +162,7 @@ export function AdminIdValidationDialog({
                   <Info label="Email" value={request.email} />
                   <Info label="Phone Number" value={request.phoneNumber} />
                   <Info label="Status" value={request.status.toUpperCase()} />
+                  <Info label="College" value={request.college || "N/A"} />
                   <Info label="Course" value={request.course || "N/A"} />
                   <Info label="Section" value={request.section || "N/A"} />
                   <Info label="Year Level" value={request.yearLevel || "N/A"} />
@@ -131,27 +170,15 @@ export function AdminIdValidationDialog({
 
                 <Separator className="my-4" />
 
-                {/* IMAGES */}
                 <div className="space-y-4">
                   <h3 className="font-semibold text-sm">Submitted Images</h3>
-
                   <div className="grid grid-cols-5 gap-4">
                     {request.idPicture && (
-                      <ImageBox
-                        label="TUP ID"
-                        src={request.idPicture}
-                        onClick={openPreview}
-                      />
+                      <ImageBox label="TUP ID" src={request.idPicture} onClick={openPreview} />
                     )}
-
                     {request.corFile && (
-                      <ImageBox
-                        label="COR"
-                        src={request.corFile}
-                        onClick={openPreview}
-                      />
+                      <ImageBox label="COR" src={request.corFile} onClick={openPreview} />
                     )}
-
                     {request.selfiePictures &&
                       Object.entries(request.selfiePictures).map(
                         ([key, img]) =>
@@ -169,7 +196,6 @@ export function AdminIdValidationDialog({
 
                 <Separator className="my-4" />
 
-                {/* ACTIONS */}
                 {!isFinalized && (
                   <div className="flex justify-end gap-3">
                     <Button
@@ -179,31 +205,10 @@ export function AdminIdValidationDialog({
                     >
                       Reject
                     </Button>
-
                     <Button
                       className="bg-green-600 hover:bg-green-700"
                       disabled={processing}
-                      onClick={async () => {
-                        setProcessing(true)
-                        try {
-                          const res = await fetch(
-                            "/api/admin/id-validation/accept",
-                            {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ requestId: request.id }),
-                            }
-                          )
-                          if (!res.ok) throw new Error()
-                          toast.success("Request approved successfully")
-                          onUpdate()
-                          onClose()
-                        } catch {
-                          toast.error("Failed to approve request")
-                        } finally {
-                          setProcessing(false)
-                        }
-                      }}
+                      onClick={handleAccept}
                     >
                       {processing ? "Processing..." : "Accept"}
                     </Button>
@@ -212,7 +217,6 @@ export function AdminIdValidationDialog({
               </div>
             </div>
 
-            {/* 2. IMAGE PREVIEW PANEL (Absolutely Positioned) */}
             {previewImage && (
               <div className="absolute left-[calc(100%+1.5rem)] top-0 w-100 shrink-0 animate-in fade-in slide-in-from-left-4 duration-300">
                 <ImagePreviewPanel
@@ -224,7 +228,6 @@ export function AdminIdValidationDialog({
                 />
               </div>
             )}
-
           </div>
         </DialogContent>
       </Dialog>
@@ -255,32 +258,7 @@ export function AdminIdValidationDialog({
             <Button
               variant="destructive"
               disabled={!rejectRemarks.trim() || processing}
-              onClick={async () => {
-                setProcessing(true)
-                try {
-                  const res = await fetch(
-                    "/api/admin/id-validation/reject",
-                    {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ 
-                        requestId: request.id,
-                        rejectRemarks: rejectRemarks.trim()
-                      }),
-                    }
-                  )
-                  if (!res.ok) throw new Error()
-                  toast.success("Request rejected successfully")
-                  setShowRejectDialog(false)
-                  setRejectRemarks("")
-                  onUpdate()
-                  onClose()
-                } catch {
-                  toast.error("Failed to reject request")
-                } finally {
-                  setProcessing(false)
-                }
-              }}
+              onClick={handleReject}
             >
               {processing ? "Processing..." : "Confirm Rejection"}
             </Button>
@@ -291,13 +269,10 @@ export function AdminIdValidationDialog({
   )
 }
 
-/* HELPERS */
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-1">
-      <p className="font-semibold text-xs text-muted-foreground uppercase">
-        {label}
-      </p>
+      <p className="font-semibold text-xs text-muted-foreground uppercase">{label}</p>
       <p className="text-sm font-medium">{value}</p>
     </div>
   )
@@ -313,9 +288,10 @@ function ImageBox({
   onClick: (src: string, title: string) => void
 }) {
   const [imageError, setImageError] = useState(false)
-  
-  const srcWithCacheBust = src.includes('?t=') ? src : `${src}${src.includes('?') ? '&' : '?'}t=${Date.now()}`
-  
+  const srcWithCacheBust = src.includes("?t=")
+    ? src
+    : `${src}${src.includes("?") ? "&" : "?"}t=${Date.now()}`
+
   return (
     <div className="space-y-1 text-center group">
       <p className="text-[10px] font-bold uppercase truncate">{label}</p>
@@ -332,11 +308,11 @@ function ImageBox({
             </p>
           </div>
         ) : (
-          <Image 
+          <Image
             src={srcWithCacheBust}
-            alt={label} 
-            fill 
-            priority 
+            alt={label}
+            fill
+            priority
             className="object-cover"
             onError={() => setImageError(true)}
             unoptimized

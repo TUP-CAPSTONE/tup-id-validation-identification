@@ -20,6 +20,7 @@ export type ValidationRequest = {
   course: string
   section: string
   yearLevel: string
+  college: string
   idPicture: string
   selfiePictures: {
     properHaircut?: string
@@ -49,6 +50,8 @@ interface Props {
   sortOrder: "asc" | "desc"
   onSortChange: (column: string, order: "asc" | "desc") => void
   loading: boolean
+  onAcceptSuccess: () => void
+  onRejectSuccess: () => void
 }
 
 export function AdminIdValidationTable({
@@ -65,6 +68,8 @@ export function AdminIdValidationTable({
   sortOrder,
   onSortChange,
   loading,
+  onAcceptSuccess, // ✅ now destructured
+  onRejectSuccess, // ✅ now destructured
 }: Props) {
   const [selected, setSelected] = useState<ValidationRequest | null>(null)
   const [open, setOpen] = useState(false)
@@ -185,6 +190,8 @@ export function AdminIdValidationTable({
         onClose={() => setOpen(false)}
         request={selected}
         onUpdate={handleUpdate}
+        onAcceptSuccess={onAcceptSuccess} // ✅ now passed through
+        onRejectSuccess={onRejectSuccess} // ✅ now passed through
       />
     </>
   )

@@ -1,14 +1,20 @@
 "use client"
 
-import { useState, useEffect } from "react"
+import { useState, useEffect, useCallback } from "react"
 import { AdminSidebar } from "@/components/admin-sidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { toast } from "sonner"
+import Confetti from "react-confetti"
+import { useWindowSize } from "react-use"
 
 import {
   AdminIdValidationTable,
   ValidationRequest,
 } from "@/components/admin-id-validation-table"
+import {
+  getEffectsSettings,
+  type EffectsSettings,
+} from "@/components/admin-nav-user"
 
 interface ValidationResponse {
   requests: ValidationRequest[]
@@ -27,6 +33,44 @@ export default function AdminValidationPage() {
   const [sortBy, setSortBy] = useState("requestTime")
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
 
+  const [showConfetti, setShowConfetti] = useState(false)
+  const { width, height } = useWindowSize()
+
+  const [rejectFlash, setRejectFlash] = useState(false)
+  const [flashCount, setFlashCount] = useState(0)
+
+  const [effectsSettings, setEffectsSettings] = useState<EffectsSettings>({
+    soundEnabled: true,
+    visualEnabled: true,
+  })
+
+  useEffect(() => {
+    setEffectsSettings(getEffectsSettings())
+    const handler = (e: Event) => {
+      setEffectsSettings((e as CustomEvent<EffectsSettings>).detail)
+    }
+    window.addEventListener("effectsSettingsChanged", handler)
+    return () => window.removeEventListener("effectsSettingsChanged", handler)
+  }, [])
+
+  useEffect(() => {
+    if (flashCount <= 0) return
+    const BLINK_DURATION = 150
+    setRejectFlash(true)
+    let count = 0
+    const totalToggles = 10
+    const interval = setInterval(() => {
+      count++
+      setRejectFlash((prev) => !prev)
+      if (count >= totalToggles) {
+        clearInterval(interval)
+        setRejectFlash(false)
+        setFlashCount(0)
+      }
+    }, BLINK_DURATION)
+    return () => clearInterval(interval)
+  }, [flashCount])
+
   const fetchRequests = async (
     cursor: string | null = null,
     newPageSize: number = pageSize,
@@ -36,17 +80,12 @@ export default function AdminValidationPage() {
   ) => {
     try {
       setLoading(true)
-
-      const params = new URLSearchParams({
-        pageSize: newPageSize.toString(),
-      })
-
+      const params = new URLSearchParams({ pageSize: newPageSize.toString() })
       if (cursor) params.append("lastRequestId", cursor)
       if (newStatus) params.append("status", newStatus)
       if (newSortBy) params.append("sortBy", newSortBy)
       if (newSortOrder) params.append("sortOrder", newSortOrder)
 
-      // ✅ Uses admin-specific route — verified by admin_session cookie server-side
       const response = await fetch(`/api/admin/validation-request?${params.toString()}`)
 
       if (!response.ok) {
@@ -57,11 +96,8 @@ export default function AdminValidationPage() {
           })
           return
         }
-
         const errorText = await response.text()
         console.error("API Error Response:", errorText)
-        console.error("Status:", response.status)
-
         toast.error("Error", {
           description: `Failed to fetch validation requests (Status: ${response.status})`,
         })
@@ -74,9 +110,7 @@ export default function AdminValidationPage() {
       setLastRequestId(data.lastRequestId)
     } catch (error) {
       console.error("Error fetching requests:", error)
-      toast.error("Error", {
-        description: "Failed to load validation requests. Please try again.",
-      })
+      toast.error("Error", { description: "Failed to load validation requests. Please try again." })
     } finally {
       setLoading(false)
     }
@@ -110,11 +144,55 @@ export default function AdminValidationPage() {
     fetchRequests(null, pageSize, statusFilter, sortBy, sortOrder)
   }
 
+  const triggerCelebration = useCallback(() => {
+    if (effectsSettings.soundEnabled) {
+      const audio = new Audio("/sound_effects/accept.mp3")
+      audio.play().catch((err) => console.error("Error playing sound:", err))
+    }
+    if (effectsSettings.visualEnabled) {
+      setShowConfetti(true)
+      setTimeout(() => setShowConfetti(false), 5000)
+    }
+  }, [effectsSettings])
+
+  const triggerReject = useCallback(() => {
+    if (effectsSettings.soundEnabled) {
+      const audio = new Audio("/sound_effects/reject.mp3")
+      audio.play().catch((err) => console.error("Error playing sound:", err))
+    }
+    if (effectsSettings.visualEnabled) {
+      setFlashCount((prev) => prev + 1)
+    }
+  }, [effectsSettings])
+
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full">
         <AdminSidebar />
-        <main className="flex-1 overflow-y-auto bg-gray-50">
+        <main className="flex-1 overflow-y-auto bg-gray-50 relative">
+          {showConfetti && (
+            <Confetti
+              width={width}
+              height={height}
+              recycle={false}
+              numberOfPieces={500}
+              gravity={0.3}
+            />
+          )}
+
+          <div
+            aria-hidden="true"
+            style={{
+              position: "fixed",
+              inset: 0,
+              backgroundColor: "rgba(220, 38, 38, 0.45)",
+              opacity: rejectFlash ? 1 : 0,
+              transition: rejectFlash ? "none" : "opacity 80ms ease-out",
+              pointerEvents: "none",
+              zIndex: 9999,
+            }}
+          />
+
           <div className="min-h-full p-8">
             <div className="max-w-7xl mx-auto">
               <div className="mb-10">
@@ -144,6 +222,8 @@ export default function AdminValidationPage() {
                     sortOrder={sortOrder}
                     onSortChange={handleSortChange}
                     loading={loading}
+                    onAcceptSuccess={triggerCelebration}
+                    onRejectSuccess={triggerReject}
                   />
                 )}
               </div>
