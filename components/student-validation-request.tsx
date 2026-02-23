@@ -241,6 +241,16 @@ export default function StudentValidationRequest() {
     return () => unsubscribe();
   }, []);
 
+  // Auto-fill college, course, section, and year level from student profile
+  useEffect(() => {
+    if (studentProfile) {
+      setCollege(studentProfile.college || '');
+      setCourse(studentProfile.course || '');
+      setSection(studentProfile.section || '');
+      setYearLevel(studentProfile.yearLevel || studentProfile.year_level || '');
+    }
+  }, [studentProfile]);
+
   /**
    * Handle COR file upload — enforces 5MB limit client-side
    */
@@ -721,7 +731,7 @@ export default function StudentValidationRequest() {
       <Card className="border-red-200">
         <CardHeader className="bg-red-50">
           <CardTitle className="text-red-700">Student Information</CardTitle>
-          <CardDescription>Your name, email, and guardian email are automatically filled and cannot be changed. Please fill in your college, course, section, and year level</CardDescription>
+          <CardDescription>Your information is automatically filled from your profile and cannot be changed</CardDescription>
         </CardHeader>
         <CardContent className="pt-6 space-y-4">
           <div>
@@ -756,53 +766,35 @@ export default function StudentValidationRequest() {
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">College *</label>
-              <select
-                value={college}
-                onChange={(e) => { setCollege(e.target.value); setCourse(''); }}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
-              >
-                <option value="">Select College</option>
-                <option value="COS">COS - College of Science</option>
-                <option value="COE">COE - College of Engineering</option>
-                <option value="CAFA">CAFA - College of Architecture and Fine Arts</option>
-                <option value="CIE">CIE - College of Industrial Education</option>
-                <option value="CLA">CLA - College of Liberal Arts</option>
-                <option value="CIT">CIT - College of Industrial Technology</option>
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-2">College (Auto-filled)</label>
+              <input
+                type="text"
+                value={college || ''}
+                disabled
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
+              />
             </div>
 
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Course *</label>
-              <select
-                value={course}
-                onChange={(e) => setCourse(e.target.value)}
-                disabled={!college}
-                className={`w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500 ${!college ? 'bg-gray-100 cursor-not-allowed' : ''}`}
-              >
-                <option value="">{!college ? 'Select a college first' : 'Select Course'}</option>
-                {getCoursesForCollege().map((courseOption) => (
-                  <option key={courseOption} value={courseOption}>{courseOption}</option>
-                ))}
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Course (Auto-filled)</label>
+              <input
+                type="text"
+                value={course || ''}
+                disabled
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
+              />
             </div>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">Section *</label>
-              <select
-                value={section}
-                onChange={(e) => setSection(e.target.value)}
-                className="w-full px-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:border-red-500 focus:ring-1 focus:ring-red-500"
-              >
-                <option value="">Select Section</option>
-                <option value="A">A</option>
-                <option value="B">B</option>
-                <option value="C">C</option>
-                <option value="D">D</option>
-                <option value="E">E</option>
-              </select>
+              <label className="block text-sm font-medium text-gray-700 mb-2">Section (Auto-filled)</label>
+              <input
+                type="text"
+                value={section || ''}
+                disabled
+                className="w-full px-4 py-2 border border-gray-300 rounded-lg bg-gray-100 text-gray-700 cursor-not-allowed"
+              />
             </div>
 
             <div>

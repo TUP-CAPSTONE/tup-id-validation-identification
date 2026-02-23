@@ -25,6 +25,9 @@ import { toast } from "sonner";
 interface Student {
   studentNumber: string;
   fullName: string;
+  college: string;
+  course: string;
+  section: string;
   status: "Validated" | "Not Validated" | "Request Pending";
   validatedAt: string | null;
   email: string;
@@ -35,7 +38,68 @@ interface StudentResponse {
   hasMore: boolean;
   lastStudentNumber: string | null;
   totalFetched: number;
+  availableColleges?: string[];
+  availableCourses?: string[];
+  availableSections?: string[];
 }
+
+// College to Courses mapping
+const COLLEGE_COURSES: Record<string, string[]> = {
+  'COS': [
+    'BS Computer Science',
+    'BS Information Technology',
+    'BS Information Systems',
+    'BS Environmental Science',
+    'BAS Laboratory Technology'
+  ],
+  'COE': [
+    'BS Civil Engineering',
+    'BS Mechanical Engineering',
+    'BS Electrical Engineering',
+    'BS Electronics Engineering'
+  ],
+  'CAFA': [
+    'BS Architecture',
+    'Bachelor of Fine Arts',
+    'BGT - Architecture Technology',
+    'BGT - Industrial Design',
+    'BGT - Mechanical Drafting Technology'
+  ],
+  'CIE': [
+    'BSIE - ICT',
+    'BSIE - Home Economics',
+    'BSIE - Industrial Arts',
+    'BTVTE - Animation',
+    'BTVTE - Automotive',
+    'BTVTE - Beauty Care and Wellness',
+    'BTVTE - Computer Programming',
+    'BTVTE - Electrical',
+    'BTVTE - Electronics',
+    'BTVTE - Food Service Management',
+    'BTVTE - Fashion and Garment',
+    'BTVTE - Heat Ventilation and Air Conditioning'
+  ],
+  'CLA': [
+    'BS Business Management - Industrial Management',
+    'BS Entrepreneurship',
+    'BS Hospitality Management'
+  ],
+  'CIT': [
+    'BS Food Technology',
+    'BET - Civil Technology',
+    'BET - Electronics Technology',
+    'BET - Computer Engineering Technology',
+    'BET - Electronic Communication Technology',
+    'BET - Instrumentation and Control Technology',
+    'BET - Mechanical Technology',
+    'BET - Mechatronics Technology',
+    'BET - Railway Technology',
+    'BET - Mechanical Engineering Technology',
+    'BT - Apparel and Fashion',
+    'BT - Culinary Technology',
+    'BT - Print Media Technology'
+  ]
+};
 
 export function OSAStudentsTable() {
   const [students, setStudents] = useState<Student[]>([]);
@@ -48,8 +112,25 @@ export function OSAStudentsTable() {
   const [pageSize] = useState(20);
   const [currentPage, setCurrentPage] = useState(1);
   const [pageHistory, setPageHistory] = useState<(string | null)[]>([null]);
+  const [collegeFilter, setCollegeFilter] = useState("");
+  const [courseFilter, setCourseFilter] = useState("");
+  const [sectionFilter, setSectionFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("all");
+  const [availableColleges, setAvailableColleges] = useState<string[]>([]);
+  const [availableCourses, setAvailableCourses] = useState<string[]>([]);
+  const [availableSections, setAvailableSections] = useState<string[]>([]);
 
-  const fetchStudents = async (cursor: string | null = null, isNextPage = true) => {
+  const fetchStudents = async (
+    cursor: string | null = null,
+    isNextPage = true,
+    filters?: {
+      search?: string;
+      college?: string;
+      course?: string;
+      section?: string;
+      status?: string;
+    }
+  ) => {
     setLoading(true);
     try {
       const params = new URLSearchParams({
@@ -60,8 +141,31 @@ export function OSAStudentsTable() {
         params.append("lastStudentNumber", cursor);
       }
 
-      if (searchQuery) {
-        params.append("search", searchQuery);
+      // Use provided filters or fall back to component state
+      const search = filters?.search !== undefined ? filters.search : searchQuery;
+      const college = filters?.college !== undefined ? filters.college : collegeFilter;
+      const course = filters?.course !== undefined ? filters.course : courseFilter;
+      const section = filters?.section !== undefined ? filters.section : sectionFilter;
+      const status = filters?.status !== undefined ? filters.status : statusFilter;
+
+      if (search) {
+        params.append("search", search);
+      }
+
+      if (college) {
+        params.append("college", college);
+      }
+
+      if (course) {
+        params.append("course", course);
+      }
+
+      if (section) {
+        params.append("section", section);
+      }
+
+      if (status !== "all") {
+        params.append("status", status);
       }
 
       const response = await fetch(`/api/osa/students?${params.toString()}`);
@@ -81,6 +185,9 @@ export function OSAStudentsTable() {
       setStudents(data.students);
       setHasMore(data.hasMore);
       setLastStudentNumber(data.lastStudentNumber);
+      setAvailableColleges(data.availableColleges || []);
+      setAvailableCourses(data.availableCourses || []);
+      setAvailableSections(data.availableSections || []);
 
       // Update page history for back navigation
       if (isNextPage && data.lastStudentNumber) {
@@ -123,7 +230,45 @@ export function OSAStudentsTable() {
     e.preventDefault();
     setCurrentPage(1);
     setPageHistory([null]);
-    fetchStudents(null, true);
+    // Only search, don't apply current filters
+    fetchStudents(null, true, {
+      search: searchQuery,
+      college: "",
+      course: "",
+      section: "",
+      status: "all",
+    });
+  };
+
+  const handleFilterChange = () => {
+    setCurrentPage(1);
+    setPageHistory([null]);
+    // Only apply filters, don't include search query
+    fetchStudents(null, true, {
+      search: "",
+      college: collegeFilter,
+      course: courseFilter,
+      section: sectionFilter,
+      status: statusFilter,
+    });
+  };
+
+  const handleResetFilters = () => {
+    setSearchQuery("");
+    setCollegeFilter("");
+    setCourseFilter("");
+    setSectionFilter("");
+    setStatusFilter("all");
+    setCurrentPage(1);
+    setPageHistory([null]);
+    // Pass empty filters explicitly
+    fetchStudents(null, true, {
+      search: "",
+      college: "",
+      course: "",
+      section: "",
+      status: "all",
+    });
   };
 
   const formatDate = (dateString: string | null) => {
@@ -149,13 +294,28 @@ export function OSAStudentsTable() {
     }
   };
 
-  const fetchAllStudents = async () => {
+  const fetchAllStudents = async (
+    filtersToUse?: {
+      search?: string;
+      college?: string;
+      course?: string;
+      section?: string;
+      status?: string;
+    }
+  ) => {
     setGeneratingPDF(true);
     const allFetchedStudents: Student[] = [];
     let cursor: string | null = null;
     let hasMoreData = true;
 
     try {
+      // Use provided filters or fall back to component state
+      const search = filtersToUse?.search !== undefined ? filtersToUse.search : searchQuery;
+      const college = filtersToUse?.college !== undefined ? filtersToUse.college : collegeFilter;
+      const course = filtersToUse?.course !== undefined ? filtersToUse.course : courseFilter;
+      const section = filtersToUse?.section !== undefined ? filtersToUse.section : sectionFilter;
+      const status = filtersToUse?.status !== undefined ? filtersToUse.status : statusFilter;
+
       while (hasMoreData) {
         const params = new URLSearchParams({
           pageSize: "100", // Fetch 100 at a time for efficiency
@@ -165,8 +325,24 @@ export function OSAStudentsTable() {
           params.append("lastStudentNumber", cursor);
         }
 
-        if (searchQuery) {
-          params.append("search", searchQuery);
+        if (search) {
+          params.append("search", search);
+        }
+
+        if (college) {
+          params.append("college", college);
+        }
+
+        if (course) {
+          params.append("course", course);
+        }
+
+        if (section) {
+          params.append("section", section);
+        }
+
+        if (status !== "all") {
+          params.append("status", status);
         }
 
         const response = await fetch(`/api/osa/students?${params.toString()}`);
@@ -200,12 +376,20 @@ export function OSAStudentsTable() {
     }
   };
 
-  const generatePDF = async () => {
+  const generatePDF = async (
+    filtersToUse?: {
+      search?: string;
+      college?: string;
+      course?: string;
+      section?: string;
+      status?: string;
+    }
+  ) => {
     // Dynamically import jsPDF and autoTable
     const { default: jsPDF } = await import("jspdf");
     const autoTable = (await import("jspdf-autotable")).default;
 
-    const studentsToExport = allStudents.length > 0 ? allStudents : await fetchAllStudents();
+    const studentsToExport = await fetchAllStudents(filtersToUse);
     
     if (!studentsToExport || studentsToExport.length === 0) {
       toast.error("No data to export");
@@ -227,13 +411,16 @@ export function OSAStudentsTable() {
     const tableData = studentsToExport.map(student => [
       student.studentNumber,
       student.fullName,
+      student.college,
+      student.course,
+      student.section,
       student.status,
       formatDate(student.validatedAt),
     ]);
 
     // Add table using autoTable
     autoTable(doc, {
-      head: [["TUP ID", "Full Name", "Status", "Date of Validation"]],
+      head: [["TUP ID", "Full Name", "College", "Course", "Section", "Status", "Date of Validation"]],
       body: tableData,
       startY: 35,
       theme: "grid",
@@ -243,14 +430,17 @@ export function OSAStudentsTable() {
         fontStyle: "bold",
       },
       styles: {
-        fontSize: 8,
-        cellPadding: 3,
+        fontSize: 7,
+        cellPadding: 2,
       },
       columnStyles: {
-        0: { cellWidth: 30 }, // TUP ID
-        1: { cellWidth: 50 }, // Full Name
-        2: { cellWidth: 30 }, // Status
-        3: { cellWidth: 30 }, // Date
+        0: { cellWidth: 22 }, // TUP ID
+        1: { cellWidth: 30 }, // Full Name
+        2: { cellWidth: 20 }, // College
+        3: { cellWidth: 35 }, // Course
+        4: { cellWidth: 15 }, // Section
+        5: { cellWidth: 18 }, // Status
+        6: { cellWidth: 25 }, // Date
       },
     });
 
@@ -258,7 +448,13 @@ export function OSAStudentsTable() {
   };
 
   const handleDownloadPDF = async () => {
-    const doc = await generatePDF();
+    const doc = await generatePDF({
+      search: "",
+      college: collegeFilter,
+      course: courseFilter,
+      section: sectionFilter,
+      status: statusFilter,
+    });
     if (doc) {
       doc.save(`student-list-${new Date().toISOString().split("T")[0]}.pdf`);
       toast.success("PDF downloaded successfully");
@@ -266,7 +462,13 @@ export function OSAStudentsTable() {
   };
 
   const handlePrintPDF = async () => {
-    const doc = await generatePDF();
+    const doc = await generatePDF({
+      search: "",
+      college: collegeFilter,
+      course: courseFilter,
+      section: sectionFilter,
+      status: statusFilter,
+    });
     if (doc) {
       doc.autoPrint();
       window.open(doc.output("bloburl"), "_blank");
@@ -277,32 +479,8 @@ export function OSAStudentsTable() {
   return (
     <Card>
       <CardContent>
-        {/* Action Buttons */}
-        <div className="flex gap-2 mb-4">
-          <Button
-            variant="outline"
-            onClick={handleDownloadPDF}
-            disabled={generatingPDF}
-          >
-            {generatingPDF ? (
-              <Loader2 className="h-4 w-4 mr-2 animate-spin" />
-            ) : (
-              <Download className="h-4 w-4 mr-2" />
-            )}
-            Download PDF
-          </Button>
-          <Button
-            variant="outline"
-            onClick={handlePrintPDF}
-            disabled={generatingPDF}
-          >
-            <Printer className="h-4 w-4 mr-2" />
-            Print
-          </Button>
-        </div>
-
-        {/* Search Bar */}
-        <form onSubmit={handleSearch} className="mb-4">
+        {/* Search and Filter Bar */}
+        <form onSubmit={handleSearch} className="mb-4 space-y-3">
           <div className="flex gap-2">
             <div className="relative flex-1">
               <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
@@ -324,6 +502,126 @@ export function OSAStudentsTable() {
           </div>
         </form>
 
+        {/* Filters */}
+        <div className="mb-4 space-y-3">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-2">
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1 block">College (Priority 1)</label>
+              <select
+                value={collegeFilter}
+                onChange={(e) => {
+                  setCollegeFilter(e.target.value);
+                  setCourseFilter("");
+                  setSectionFilter("");
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:border-blue-500"
+              >
+                <option value="">All Colleges</option>
+                {availableColleges.map(college => (
+                  <option key={college} value={college}>{college}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1 block">Status (Priority 2)</label>
+              <select
+                value={statusFilter}
+                onChange={(e) => {
+                  setStatusFilter(e.target.value);
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:border-blue-500"
+              >
+                <option value="all">All Status</option>
+                <option value="Validated">Validated</option>
+                <option value="Not Validated">Not Validated</option>
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1 block">Course (Priority 3)</label>
+              <select
+                value={courseFilter}
+                onChange={(e) => {
+                  setCourseFilter(e.target.value);
+                }}
+                disabled={!collegeFilter}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:border-blue-500 disabled:bg-gray-100 disabled:text-gray-500 disabled:cursor-not-allowed"
+              >
+                <option value="">All Courses</option>
+                {collegeFilter && COLLEGE_COURSES[collegeFilter]?.map(course => (
+                  <option key={course} value={course}>{course}</option>
+                ))}
+              </select>
+            </div>
+
+            <div>
+              <label className="text-xs font-semibold text-gray-600 mb-1 block">Section (Priority 4)</label>
+              <select
+                value={sectionFilter}
+                onChange={(e) => {
+                  setSectionFilter(e.target.value);
+                }}
+                className="w-full px-3 py-2 border border-gray-300 rounded-lg bg-white text-sm focus:outline-none focus:border-blue-500"
+              >
+                <option value="">All Sections</option>
+                {availableSections.map(section => (
+                  <option key={section} value={section}>{section}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="flex justify-between items-center gap-2">
+            <div className="flex gap-2">
+              <Button
+                onClick={handleFilterChange}
+                size="sm"
+                className="bg-blue-600 hover:bg-blue-700 text-white"
+                disabled={loading}
+              >
+                {loading ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  "Apply Filters"
+                )}
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleResetFilters}
+                className="border-red-300 hover:bg-red-50 text-red-700"
+              >
+                Reset All Filters
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handleDownloadPDF}
+                disabled={generatingPDF}
+              >
+                {generatingPDF ? (
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                ) : (
+                  <Download className="h-4 w-4 mr-2" />
+                )}
+                PDF
+              </Button>
+              <Button
+                variant="outline"
+                size="sm"
+                onClick={handlePrintPDF}
+                disabled={generatingPDF}
+              >
+                <Printer className="h-4 w-4 mr-2" />
+                Print
+              </Button>
+            </div>
+          </div>
+        </div>
+
         {/* Table */}
         <div className="rounded-md border">
           <Table>
@@ -331,6 +629,9 @@ export function OSAStudentsTable() {
               <TableRow>
                 <TableHead>TUP ID</TableHead>
                 <TableHead>Full Name</TableHead>
+                <TableHead>College</TableHead>
+                <TableHead>Course</TableHead>
+                <TableHead>Section</TableHead>
                 <TableHead>Status</TableHead>
                 <TableHead>Date of Validation</TableHead>
               </TableRow>
@@ -338,14 +639,14 @@ export function OSAStudentsTable() {
             <TableBody>
               {loading && students.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     <Loader2 className="h-6 w-6 animate-spin mx-auto mb-2" />
                     <p className="text-sm text-muted-foreground">Loading students...</p>
                   </TableCell>
                 </TableRow>
               ) : students.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={5} className="text-center py-8">
+                  <TableCell colSpan={7} className="text-center py-8">
                     <p className="text-sm text-muted-foreground">No students found</p>
                   </TableCell>
                 </TableRow>
@@ -356,6 +657,9 @@ export function OSAStudentsTable() {
                       {student.studentNumber}
                     </TableCell>
                     <TableCell>{student.fullName}</TableCell>
+                    <TableCell>{student.college}</TableCell>
+                    <TableCell>{student.course}</TableCell>
+                    <TableCell>{student.section}</TableCell>
                     <TableCell>{getStatusBadge(student.status)}</TableCell>
                     <TableCell>{formatDate(student.validatedAt)}</TableCell>
                   </TableRow>

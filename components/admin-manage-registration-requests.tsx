@@ -14,6 +14,9 @@ export interface RegistrationRequest {
   bday?: string
   guardianEmail: string
   guardianPhone: string
+  college: string
+  course: string
+  section: string
   uid: string
   requestedAt: any
   requestedAtISO?: string

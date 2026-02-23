@@ -1,9 +1,9 @@
 "use client";
 
+import { useState, useEffect } from "react";
 import { auth, db } from "@/lib/firebaseConfig";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { query, collection, where, getDocs } from "firebase/firestore";
-import { useState, useEffect } from "react";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/button";
 import {
@@ -44,6 +44,9 @@ export function StudentRegistrationForm({
     student_phone_num: "",
     guardian_email: "",
     guardian_phone_number: "",
+    college: "",
+    course: "",
+    section: "",
   });
   const [error, setError] = useState("");
   const [success, setSuccess] = useState("");
@@ -68,6 +71,69 @@ export function StudentRegistrationForm({
     down: null,
   });
 
+  // ✅ College to Courses Mapping
+  const collegeCoursesMap: { [key: string]: string[] } = {
+    'COS': [
+      'BS Computer Science',
+      'BS Information Technology',
+      'BS Information Systems',
+      'BS Environmental Science', 
+      'BAS Laboratory Technology'
+    ],
+    'COE': [
+      'BS Civil Engineering',
+      'BS Mechanical Engineering',
+      'BS Electrical Engineering',
+      'BS Electronics Engineering'
+    ],
+    'CAFA': [
+      'BS Architecture',
+      'Bachelor of Fine Arts',
+      'BGT - Architecture Technology',
+      'BGT - Industrial Design',
+      'BGT - Mechanical Drafting Technology',
+    ],
+    'CIE': [
+      'BSIE - ICT',
+      'BSIE - Home Economics',
+      'BSIE - Industrial Arts',
+      'BTVTE - Animation',
+      'BTVTE - Automotive',
+      'BTVTE - Beauty Care and Wellness',
+      'BTVTE - Computer Programming',
+      'BTVTE - Electrical',
+      'BTVTE - Electronics',
+      'BTVTE - Food Service Management',
+      'BTVTE - Fashion and Garment',
+      'BTVTE - Heat Ventilation and Air Conditioning',
+    ],
+    'CLA': [
+      'BS Business Management - Industrial Management',
+      'BS Entrepreneurship',
+      'BS Hospitality Management',
+    ],
+    'CIT': [
+      'BS Food Technology',
+      'BET - Civil Technology',
+      'BET - Electronics Technology',
+      'BET - Computer Engineering Technology',
+      'BET - Electronic Communication Technology',
+      'BET - Instrumentation and Control Technology',
+      'BET - Mechanical Technology',
+      'BET - Mechatronics Technology',
+      'BET - Railway Technology',
+      'BET - Mechanical Engineering Technology',
+      'BT - Apparel and Fashion',
+      'BT - Culinary Technology',
+      'BT - Print Media Technology',
+    ]
+  };
+
+  const getCoursesForCollege = (): string[] => {
+    if (!formData.college) return [];
+    return collegeCoursesMap[formData.college] || [];
+  };
+
   // Check if all face photos are captured
   const allFacePhotosCaptured = Object.values(facePhotos).every((photo) => photo !== null);
   
@@ -77,18 +143,13 @@ export function StudentRegistrationForm({
     
     setValidatingGuardianEmail(true);
     try {
-      // Basic format validation
       const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
       if (!emailRegex.test(email)) {
         return false;
       }
 
-      // Additional validation: Check if domain exists (basic check)
-      // For production, you might want to use an email validation API
       const domain = email.split('@')[1];
       const commonDomains = ['gmail.com', 'yahoo.com', 'outlook.com', 'hotmail.com', 'tup.edu.ph'];
-      
-      // For now, we'll accept common domains or any .edu.ph domain
       const isValid = commonDomains.includes(domain.toLowerCase()) || domain.toLowerCase().endsWith('.edu.ph');
       
       return isValid;
@@ -112,7 +173,10 @@ export function StudentRegistrationForm({
       !formData.student_email ||
       !formData.student_phone_num ||
       !formData.guardian_email ||
-      !formData.guardian_phone_number
+      !formData.guardian_phone_number ||
+      !formData.college ||
+      !formData.course ||
+      !formData.section
     ) {
       setError("Please fill in all required fields");
       setSendingCodes(false);
@@ -135,7 +199,6 @@ export function StudentRegistrationForm({
     }
 
     try {
-      // Send verification codes to both emails
       const response = await fetch('/api/send-verification', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -152,7 +215,6 @@ export function StudentRegistrationForm({
         throw new Error(data.error || 'Failed to send verification codes');
       }
 
-      // Store codes for verification (in production, codes should be stored server-side)
       setSentCodes({ student: data.studentCode, guardian: data.guardianCode });
       setShowVerification(true);
       setSuccess("Verification codes sent! Please check both email inboxes.");
@@ -168,7 +230,6 @@ export function StudentRegistrationForm({
     setError("");
     setLoading(true);
 
-    // Verify codes
     if (verificationCodes.student !== sentCodes.student || verificationCodes.guardian !== sentCodes.guardian) {
       setError("Invalid verification codes. Please check your emails and try again.");
       setLoading(false);
@@ -176,18 +237,11 @@ export function StudentRegistrationForm({
     }
 
     try {
-      // Submit via API with rate limiting
       const response = await fetch('/api/student/registration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: formData.name,
-          tup_id: formData.tup_id,
-          bday: formData.bday,
-          student_email: formData.student_email,
-          student_phone_num: formData.student_phone_num,
-          guardian_email: formData.guardian_email,
-          guardian_phone_number: formData.guardian_phone_number,
+          ...formData,
           facePhotos,
         })
       });
@@ -213,6 +267,9 @@ export function StudentRegistrationForm({
         student_phone_num: "",
         guardian_email: "",
         guardian_phone_number: "",
+        college: "",
+        course: "",
+        section: "",
       });
       setFacePhotos({
         neutral: null,
@@ -247,21 +304,22 @@ export function StudentRegistrationForm({
       !formData.student_email ||
       !formData.student_phone_num ||
       !formData.guardian_email ||
-      !formData.guardian_phone_number
+      !formData.guardian_phone_number ||
+      !formData.college ||
+      !formData.course ||
+      !formData.section
     ) {
       setError("Please fill in all required fields");
       setLoading(false);
       return;
     }
 
-    // Validate face photos
     if (!allFacePhotosCaptured) {
       setError("Please capture all 6 face photos before submitting");
       setLoading(false);
       return;
     }
 
-    // Validate guardian email
     const isGuardianEmailValid = await validateGuardianEmail(formData.guardian_email);
     if (!isGuardianEmailValid) {
       setError("Guardian email is invalid or not recognized. Please use a valid email address.");
@@ -270,18 +328,11 @@ export function StudentRegistrationForm({
     }
 
     try {
-      // Submit via API with rate limiting
       const response = await fetch('/api/student/registration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: formData.name,
-          tup_id: formData.tup_id,
-          bday: formData.bday,
-          student_email: formData.student_email,
-          student_phone_num: formData.student_phone_num,
-          guardian_email: formData.guardian_email,
-          guardian_phone_number: formData.guardian_phone_number,
+          ...formData,
           facePhotos,
         })
       });
@@ -307,6 +358,9 @@ export function StudentRegistrationForm({
         student_phone_num: "",
         guardian_email: "",
         guardian_phone_number: "",
+        college: "",
+        course: "",
+        section: "",
       });
       setFacePhotos({
         neutral: null,
@@ -333,7 +387,6 @@ export function StudentRegistrationForm({
       const result = await signInWithPopup(auth, provider);
       const user = result.user;
 
-      // Store Google user data and show additional fields form
       setGoogleUserData({
         uid: user.uid,
         email: user.email || "",
@@ -367,21 +420,18 @@ export function StudentRegistrationForm({
     setError("");
     setLoading(true);
 
-    // Validation for Google registration
-    if (!formData.name || !formData.tup_id || !formData.bday || !formData.guardian_email || !formData.guardian_phone_number) {
+    if (!formData.name || !formData.tup_id || !formData.bday || !formData.guardian_email || !formData.guardian_phone_number || !formData.college || !formData.course || !formData.section) {
       setError("Please fill in all required fields");
       setLoading(false);
       return;
     }
 
-    // Validate face photos
     if (!allFacePhotosCaptured) {
       setError("Please capture all 6 face photos before submitting");
       setLoading(false);
       return;
     }
 
-    // Validate guardian email
     const isGuardianEmailValid = await validateGuardianEmail(formData.guardian_email);
     if (!isGuardianEmailValid) {
       setError("Guardian email is invalid or not recognized. Please use a valid email address.");
@@ -390,18 +440,11 @@ export function StudentRegistrationForm({
     }
 
     try {
-      // Submit via API with rate limiting
       const response = await fetch('/api/student/registration', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          name: formData.name,
-          tup_id: formData.tup_id,
-          bday: formData.bday,
-          student_email: formData.student_email,
-          student_phone_num: formData.student_phone_num,
-          guardian_email: formData.guardian_email,
-          guardian_phone_number: formData.guardian_phone_number,
+          ...formData,
           facePhotos,
           uid: googleUserData.uid,
           authProvider: "google"
@@ -420,7 +463,7 @@ export function StudentRegistrationForm({
       setSuccess("Registration submitted with Google account! Your information has been saved. You will be notified once your account is approved.");
       setShowSuccessDialog(true);
 
-      // Clear form and Google data
+      // Clear form
       setFormData({
         name: "",
         tup_id: "",
@@ -429,6 +472,9 @@ export function StudentRegistrationForm({
         student_phone_num: "",
         guardian_email: "",
         guardian_phone_number: "",
+        college: "",
+        course: "",
+        section: "",
       });
       setFacePhotos({
         neutral: null,
@@ -452,15 +498,10 @@ export function StudentRegistrationForm({
   const [currentTime, setCurrentTime] = useState("");
 
   useEffect(() => {
-    // Set initial time
     setCurrentTime(formatDateTime());
-    
-    // Update time every second
     const interval = setInterval(() => {
       setCurrentTime(formatDateTime());
     }, 1000);
-
-    // Cleanup interval on unmount
     return () => clearInterval(interval);
   }, []);
 
@@ -654,6 +695,71 @@ export function StudentRegistrationForm({
                   required
                 />
               </Field>
+
+              {/* ✅ NEW: College, Course, Section */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <Field>
+                  <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="college">
+                    College *
+                  </FieldLabel>
+                  <select
+                    id="college"
+                    value={formData.college}
+                    onChange={(e) => setFormData({ ...formData, college: e.target.value, course: "" })}
+                    disabled={loading || showVerification}
+                    className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
+                    required
+                  >
+                    <option value="">Select College</option>
+                    <option value="COS">COS - College of Science</option>
+                    <option value="COE">COE - College of Engineering</option>
+                    <option value="CAFA">CAFA - College of Architecture and Fine Arts</option>
+                    <option value="CIE">CIE - College of Industrial Education</option>
+                    <option value="CLA">CLA - College of Liberal Arts</option>
+                    <option value="CIT">CIT - College of Industrial Technology</option>
+                  </select>
+                </Field>
+
+                <Field>
+                  <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="course">
+                    Course *
+                  </FieldLabel>
+                  <select
+                    id="course"
+                    value={formData.course}
+                    onChange={(e) => setFormData({ ...formData, course: e.target.value })}
+                    disabled={!formData.college || loading || showVerification}
+                    className={`h-10 w-full rounded-md border border-gray-300 px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition ${!formData.college ? 'bg-gray-100 cursor-not-allowed' : 'bg-white'}`}
+                    required
+                  >
+                    <option value="">{!formData.college ? 'Select a college first' : 'Select Course'}</option>
+                    {getCoursesForCollege().map((courseOption) => (
+                      <option key={courseOption} value={courseOption}>{courseOption}</option>
+                    ))}
+                  </select>
+                </Field>
+              </div>
+
+              <Field>
+                <FieldLabel className="text-sm font-semibold text-gray-700 mb-2" htmlFor="section">
+                  Section *
+                </FieldLabel>
+                <select
+                  id="section"
+                  value={formData.section}
+                  onChange={(e) => setFormData({ ...formData, section: e.target.value })}
+                  disabled={loading || showVerification}
+                  className="h-10 w-full rounded-md border border-gray-300 bg-white px-3 shadow-sm focus:outline-none focus:ring-2 focus:ring-[#b32032] focus:border-transparent transition"
+                  required
+                >
+                  <option value="">Select Section</option>
+                  <option value="A">A</option>
+                  <option value="B">B</option>
+                  <option value="C">C</option>
+                  <option value="D">D</option>
+                  <option value="E">E</option>
+                </select>
+              </Field>
             </div>
 
             {/* Face Photo Capture Section */}
@@ -759,6 +865,9 @@ export function StudentRegistrationForm({
                         student_phone_num: "",
                         guardian_email: "",
                         guardian_phone_number: "",
+                        college: "",
+                        course: "",
+                        section: "",
                       });
                     }}
                   >
@@ -808,4 +917,3 @@ export function StudentRegistrationForm({
     </div>
   );
 }
-

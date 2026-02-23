@@ -154,9 +154,12 @@ export function ReviewRegistrationDialog({
                   <Detail label="Student Number" value={request.studentNumber} />
                   <Detail label="Email" value={request.email} />
                   <Detail label="Phone" value={request.phone || "—"} />
+                  <Detail label="Birth Date" value={request.bday || "—"} />
                   <Detail label="Guardian Email" value={request.guardianEmail || "—"} />
                   <Detail label="Guardian Phone" value={request.guardianPhone || "—"} />
-                  <Detail label="Birth Date" value={request.bday || "—"} />
+                  <Detail label="College" value={request.college || "—"} />
+                  <Detail label="Course" value={request.course || "—"} />
+                  <Detail label="Section" value={request.section || "—"} />
                   <Detail
                     label="Requested At"
                     value={

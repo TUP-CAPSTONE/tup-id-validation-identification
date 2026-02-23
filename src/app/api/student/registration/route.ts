@@ -9,7 +9,6 @@ const STORAGE_BUCKET = "tup-id-verification.firebasestorage.app"
 
 // Helper to convert base64 to buffer
 function base64ToBuffer(base64: string): Buffer {
-  // Remove data URL prefix if present
   const base64Data = base64.replace(/^data:image\/\w+;base64,/, "")
   return Buffer.from(base64Data, "base64")
 }
@@ -66,18 +65,15 @@ async function deleteOldFilesForStudent(studentId: string): Promise<void> {
   }
 }
 
-// Rate limiter for registration submissions
 const registrationRateLimiter = rateLimiters.studentRegistration
 
 export async function POST(req: NextRequest) {
   try {
     console.log("📝 [REGISTRATION] New registration request received")
 
-    // Get IP for rate limiting
     const forwarded = req.headers.get("x-forwarded-for")
     const ip = forwarded ? forwarded.split(",")[0] : "unknown"
 
-    // Check rate limit
     const rateLimitResult = await checkRateLimit(
       registrationRateLimiter,
       `registration:${ip}`
@@ -113,12 +109,15 @@ export async function POST(req: NextRequest) {
       student_phone_num,
       guardian_email,
       guardian_phone_number,
-      facePhotos, // Object with neutral, smile, left, right, up, down
+      college,
+      course,
+      section,
+      facePhotos,
       authProvider,
       uid,
     } = body
 
-    // Validate required fields
+    // ✅ Validate required fields including college, course, section
     if (
       !name ||
       !tup_id ||
@@ -126,7 +125,10 @@ export async function POST(req: NextRequest) {
       !student_email ||
       !student_phone_num ||
       !guardian_email ||
-      !guardian_phone_number
+      !guardian_phone_number ||
+      !college ||
+      !course ||
+      !section
     ) {
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
@@ -154,9 +156,12 @@ export async function POST(req: NextRequest) {
       name,
       tup_id,
       student_email,
+      college,
+      course,
+      section,
     })
 
-    // Check if TUP ID already exists in registration_requests
+    // Check if TUP ID already exists
     const existingQuery = await adminDB
       .collection("registration_requests")
       .where("tup_id", "==", tup_id)
@@ -174,7 +179,6 @@ export async function POST(req: NextRequest) {
           { status: 400, headers: createRateLimitHeaders(rateLimitResult) }
         )
       }
-      // Allow re-submission if pending or rejected
       console.log(`ℹ️ Existing registration found for ${tup_id} with status: ${existingData.status}`)
     }
 
@@ -198,12 +202,10 @@ export async function POST(req: NextRequest) {
       }
     }
 
-    // Delete old files before uploading new ones
     await deleteOldFilesForStudent(tup_id)
 
     console.log(`🚀 Starting face photo uploads for student ${tup_id}...`)
 
-    // Upload all face photos
     const uploadPromises = [
       uploadBase64Image(facePhotos.neutral, tup_id, "face_neutral"),
       uploadBase64Image(facePhotos.smile, tup_id, "face_smile"),
@@ -213,18 +215,11 @@ export async function POST(req: NextRequest) {
       uploadBase64Image(facePhotos.down, tup_id, "face_down"),
     ]
 
-    const [
-      neutralUrl,
-      smileUrl,
-      leftUrl,
-      rightUrl,
-      upUrl,
-      downUrl,
-    ] = await Promise.all(uploadPromises)
+    const [neutralUrl, smileUrl, leftUrl, rightUrl, upUrl, downUrl] = await Promise.all(uploadPromises)
 
     console.log("✅ All face photos uploaded successfully!")
 
-    // Prepare registration data
+    // ✅ Include college, course, section in registration data
     const registrationData: Record<string, any> = {
       name,
       tup_id,
@@ -233,6 +228,9 @@ export async function POST(req: NextRequest) {
       student_phone_num,
       guardian_email,
       guardian_phone_number,
+      college,
+      course,
+      section,
       facePhotos: {
         neutral: neutralUrl,
         smile: smileUrl,
@@ -246,13 +244,11 @@ export async function POST(req: NextRequest) {
       updatedAt: FieldValue.serverTimestamp(),
     }
 
-    // Add Google auth info if provided
     if (authProvider === "google" && uid) {
       registrationData.uid = uid
       registrationData.authProvider = "google"
     }
 
-    // Save to Firestore using TUP ID as document ID
     const docRef = adminDB.collection("registration_requests").doc(tup_id)
     await docRef.set(registrationData, { merge: true })
 

@@ -34,6 +34,10 @@ export async function GET(request: NextRequest) {
     const pageSize = parseInt(searchParams.get("pageSize") || "20");
     const lastStudentNumber = searchParams.get("lastStudentNumber");
     const searchQuery = searchParams.get("search") || "";
+    const collegeFilter = searchParams.get("college") || "";
+    const courseFilter = searchParams.get("course") || "";
+    const sectionFilter = searchParams.get("section") || "";
+    const statusFilter = searchParams.get("status") || "";
 
     // Validate page size
     if (pageSize > 100 || pageSize < 1) {
@@ -43,12 +47,13 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Build the query
+    // Build the query - fetch larger dataset when filters are active
+    const effectivePageSize = (collegeFilter || statusFilter) ? 100 : pageSize;
     let studentsQuery;
     
     if (lastStudentNumber) {
       // Get the last document for pagination
-      const lastDocRef = doc(db, "student_profiles", lastStudentNumber);
+      const lastDocRef = doc(db, "testing_student_list", lastStudentNumber);
       const lastDocSnap = await getDoc(lastDocRef);
       
       if (!lastDocSnap.exists()) {
@@ -59,16 +64,16 @@ export async function GET(request: NextRequest) {
       }
 
       studentsQuery = query(
-        collection(db, "student_profiles"),
+        collection(db, "testing_student_list"),
         orderBy("studentNumber", "asc"),
         startAfter(lastDocSnap),
-        limit(pageSize)
+        limit(effectivePageSize)
       );
     } else {
       studentsQuery = query(
-        collection(db, "student_profiles"),
+        collection(db, "testing_student_list"),
         orderBy("studentNumber", "asc"),
-        limit(pageSize)
+        limit(effectivePageSize)
       );
     }
 
@@ -79,30 +84,35 @@ export async function GET(request: NextRequest) {
     const studentUids = studentsSnapshot.docs.map(doc => doc.data().uid);
 
     // Fetch pending validation requests for these students
+    // Split into chunks of 30 due to Firestore IN query limit
     let pendingRequests: { [key: string]: boolean } = {};
     if (studentUids.length > 0) {
-      const pendingQuery = query(
-        collection(db, "validation_requests2"),
-        where("studentId", "in", studentUids),
-        where("status", "==", "pending")
-      );
-      const pendingSnapshot = await getDocs(pendingQuery);
-      
-      pendingSnapshot.docs.forEach(doc => {
-        const data = doc.data();
-        pendingRequests[data.studentId] = true;
-      });
+      const chunkSize = 30;
+      for (let i = 0; i < studentUids.length; i += chunkSize) {
+        const chunk = studentUids.slice(i, i + chunkSize);
+        const pendingQuery = query(
+          collection(db, "validation_requests2"),
+          where("studentId", "in", chunk),
+          where("status", "==", "pending")
+        );
+        const pendingSnapshot = await getDocs(pendingQuery);
+        
+        pendingSnapshot.docs.forEach(doc => {
+          const data = doc.data();
+          pendingRequests[data.studentId] = true;
+        });
+      }
     }
 
     // Map the students data
-    const students = studentsSnapshot.docs.map(doc => {
+    const allStudents = studentsSnapshot.docs.map(doc => {
       const data = doc.data();
       
-      // Determine status
+      // Determine status - check validation status correctly
       let status: "Validated" | "Not Validated" | "Request Pending";
       if (pendingRequests[data.uid]) {
         status = "Request Pending";
-      } else if (data.isValidated) {
+      } else if (data.isValidated === true) {
         status = "Validated";
       } else {
         status = "Not Validated";
@@ -111,34 +121,123 @@ export async function GET(request: NextRequest) {
       return {
         studentNumber: data.studentNumber,
         fullName: data.fullName,
+        college: data.college || "N/A",
         course: data.course || "N/A",
+        section: data.section || "N/A",
         status,
         validatedAt: data.validatedAt?.toDate().toISOString() || null,
         email: data.email,
+        docId: doc.id,
       };
     });
 
-    // Apply search filter if provided (client-side for now, can be optimized with Algolia/Typesense)
-    let filteredStudents = students;
-    if (searchQuery) {
-      const lowerSearch = searchQuery.toLowerCase();
-      filteredStudents = students.filter(
-        student =>
-          student.fullName.toLowerCase().includes(lowerSearch) ||
-          student.studentNumber.toLowerCase().includes(lowerSearch)
+    // Apply filters in priority order: College -> Status -> Course -> Section
+    let filteredStudents = allStudents;
+
+    // Priority 1: Apply college filter
+    if (collegeFilter) {
+      filteredStudents = filteredStudents.filter(student => 
+        student.college.toLowerCase() === collegeFilter.toLowerCase()
       );
     }
 
+    // Priority 2: Apply status filter (exclude Request Pending by default)
+    if (statusFilter) {
+      filteredStudents = filteredStudents.filter(student => student.status === statusFilter);
+    } else {
+      // By default, exclude "Request Pending" status
+      filteredStudents = filteredStudents.filter(student => student.status !== "Request Pending");
+    }
+
+    // Priority 3: Apply course filter
+    if (courseFilter) {
+      filteredStudents = filteredStudents.filter(student => 
+        student.course.toLowerCase() === courseFilter.toLowerCase()
+      );
+    }
+
+    // Priority 4: Apply section filter
+    if (sectionFilter) {
+      filteredStudents = filteredStudents.filter(student => 
+        student.section.toLowerCase() === sectionFilter.toLowerCase()
+      );
+    }
+
+    // Priority 5: Apply search filter if provided
+    if (searchQuery) {
+      const lowerSearch = searchQuery.toLowerCase().trim();
+      filteredStudents = filteredStudents.filter(
+        student =>
+          student.fullName.toLowerCase().includes(lowerSearch) ||
+          student.studentNumber.toLowerCase().includes(lowerSearch) ||
+          student.email.toLowerCase().includes(lowerSearch)
+      );
+    }
+
+    // Collect available values for dropdowns based on ALL students fetched (before pagination)
+    const baseForDropdowns = allStudents;
+    
+    // Get all valid colleges from base data
+    const allColleges = [...new Set(
+      baseForDropdowns
+        .map(s => s.college)
+        .filter(c => c !== "N/A")
+        .sort()
+    )];
+
+    // Get courses based on selected college or all courses if no college selected
+    let allCourses: string[] = [];
+    if (collegeFilter) {
+      allCourses = [...new Set(
+        baseForDropdowns
+          .filter(s => s.college.toLowerCase() === collegeFilter.toLowerCase())
+          .map(s => s.course)
+          .filter(c => c !== "N/A")
+          .sort()
+      )];
+    } else {
+      // Show all courses if no college filter
+      allCourses = [...new Set(
+        baseForDropdowns
+          .map(s => s.course)
+          .filter(c => c !== "N/A")
+          .sort()
+      )];
+    }
+
+    // Get all sections
+    const allSections = [...new Set(
+      baseForDropdowns
+        .map(s => s.section)
+        .filter(s => s !== "N/A")
+        .sort()
+    )];
+
+    // Paginate the filtered results
+    const paginatedStudents = filteredStudents.slice(0, pageSize);
+    
+    // Remove docId from response (it's only for internal use)
+    const studentsToReturn = paginatedStudents.map(({ docId, ...rest }) => rest);
+
     // Determine if there are more results
-    const hasMore = studentsSnapshot.docs.length === pageSize;
-    const lastDoc = studentsSnapshot.docs[studentsSnapshot.docs.length - 1];
+    // hasMore is true if we have more filtered results than current page,
+    // or if we fetched a full batch AND have enough for a full page
+    const hasMore = filteredStudents.length > pageSize || 
+                    (allStudents.length === effectivePageSize && filteredStudents.length >= pageSize);
+    
+    // Get the document ID of the last filtered student for next page cursor
+    const lastFilteredStudent = paginatedStudents[paginatedStudents.length - 1];
+    const nextCursor = lastFilteredStudent ? lastFilteredStudent.docId : null;
 
     return NextResponse.json(
       {
-        students: filteredStudents,
+        students: studentsToReturn,
         hasMore,
-        lastStudentNumber: lastDoc?.id || null,
-        totalFetched: filteredStudents.length,
+        lastStudentNumber: nextCursor,
+        totalFetched: studentsToReturn.length,
+        availableColleges: allColleges,
+        availableCourses: allCourses,
+        availableSections: allSections,
       },
       {
         status: 200,
