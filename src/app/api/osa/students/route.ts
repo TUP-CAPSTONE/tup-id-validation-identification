@@ -53,7 +53,7 @@ export async function GET(request: NextRequest) {
     
     if (lastStudentNumber) {
       // Get the last document for pagination
-      const lastDocRef = doc(db, "testing_student_list", lastStudentNumber);
+      const lastDocRef = doc(db, "student_profiles", lastStudentNumber);
       const lastDocSnap = await getDoc(lastDocRef);
       
       if (!lastDocSnap.exists()) {
@@ -64,14 +64,14 @@ export async function GET(request: NextRequest) {
       }
 
       studentsQuery = query(
-        collection(db, "testing_student_list"),
+        collection(db, "student_profiles"),
         orderBy("studentNumber", "asc"),
         startAfter(lastDocSnap),
         limit(effectivePageSize)
       );
     } else {
       studentsQuery = query(
-        collection(db, "testing_student_list"),
+        collection(db, "student_profiles"),
         orderBy("studentNumber", "asc"),
         limit(effectivePageSize)
       );
