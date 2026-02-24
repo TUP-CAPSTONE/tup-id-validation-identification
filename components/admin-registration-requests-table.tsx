@@ -21,6 +21,8 @@ interface Props {
   onPageSizeChange: (size: number) => void
   statusFilter?: string
   onStatusFilterChange: (status: string | undefined) => void
+  onAcceptSuccess: () => void  
+  onRejectSuccess: () => void  
 }
 
 export function RegistrationRequestsTable({
@@ -34,6 +36,8 @@ export function RegistrationRequestsTable({
   onPageSizeChange,
   statusFilter,
   onStatusFilterChange,
+  onAcceptSuccess,
+  onRejectSuccess,
 }: Props) {
   const [selected, setSelected] = useState<RegistrationRequest | null>(null)
 
@@ -119,6 +123,8 @@ export function RegistrationRequestsTable({
           open={!!selected}
           onOpenChange={() => setSelected(null)}
           onActionComplete={onRequestsChanged}
+          onAcceptSuccess={onAcceptSuccess}
+          onRejectSuccess={onRejectSuccess}
         />
       )}
     </>

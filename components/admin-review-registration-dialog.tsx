@@ -16,12 +16,15 @@ import { RegistrationRequest } from "@/components/admin-manage-registration-requ
 import { RejectRemarksDialog } from "@/components/admin-reject-remarks-dialog"
 import { ImagePreviewPanel } from "@/components/osa-image-preview-panel"
 import { cn } from "@/lib/utils"
+import { on } from "events"
 
 interface Props {
   request: RegistrationRequest
   open: boolean
   onOpenChange: (open: boolean) => void
   onActionComplete: () => void
+  onAcceptSuccess: () => void
+  onRejectSuccess: () => void
 }
 
 export function ReviewRegistrationDialog({
@@ -29,6 +32,8 @@ export function ReviewRegistrationDialog({
   open,
   onOpenChange,
   onActionComplete,
+  onAcceptSuccess,
+  onRejectSuccess,
 }: Props) {
   const [processing, setProcessing] = useState(false)
   const [rejectOpen, setRejectOpen] = useState(false)
@@ -78,7 +83,7 @@ export function ReviewRegistrationDialog({
       }
       
       console.log("Registration accepted successfully")
-      
+      onAcceptSuccess()
       // First call the callback to refetch data
       onActionComplete()
       
@@ -244,6 +249,7 @@ export function ReviewRegistrationDialog({
         onOpenChange={setRejectOpen}
         requestId={request.id}
         onRejected={() => {
+          onRejectSuccess()
           onOpenChange(false)
           onActionComplete()
         }}

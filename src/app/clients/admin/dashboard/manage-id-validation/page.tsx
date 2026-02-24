@@ -1,6 +1,6 @@
 "use client"
 
-import { useState, useEffect, useCallback } from "react"
+import { useState, useEffect, useCallback, useRef } from "react"
 import { AdminSidebar } from "@/components/admin-sidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
 import { toast } from "sonner"
@@ -43,6 +43,17 @@ export default function AdminValidationPage() {
     soundEnabled: true,
     visualEnabled: true,
   })
+
+  // Preloaded audio refs — ready to fire instantly with no init delay
+  const acceptAudioRef = useRef<HTMLAudioElement | null>(null)
+  const rejectAudioRef = useRef<HTMLAudioElement | null>(null)
+
+  useEffect(() => {
+    acceptAudioRef.current = new Audio("/sound_effects/accept.mp3")
+    acceptAudioRef.current.load()
+    rejectAudioRef.current = new Audio("/sound_effects/reject.mp3")
+    rejectAudioRef.current.load()
+  }, [])
 
   useEffect(() => {
     setEffectsSettings(getEffectsSettings())
@@ -123,31 +134,27 @@ export default function AdminValidationPage() {
   const handlePageChange = (cursor: string | null) => {
     fetchRequests(cursor, pageSize, statusFilter, sortBy, sortOrder)
   }
-
   const handlePageSizeChange = (newSize: number) => {
     setPageSize(newSize)
     fetchRequests(null, newSize, statusFilter, sortBy, sortOrder)
   }
-
   const handleStatusFilterChange = (newStatus: string | undefined) => {
     setStatusFilter(newStatus)
     fetchRequests(null, pageSize, newStatus, sortBy, sortOrder)
   }
-
   const handleSortChange = (column: string, order: "asc" | "desc") => {
     setSortBy(column)
     setSortOrder(order)
     fetchRequests(null, pageSize, statusFilter, column, order)
   }
-
   const handleUpdate = () => {
     fetchRequests(null, pageSize, statusFilter, sortBy, sortOrder)
   }
 
   const triggerCelebration = useCallback(() => {
-    if (effectsSettings.soundEnabled) {
-      const audio = new Audio("/sound_effects/accept.mp3")
-      audio.play().catch((err) => console.error("Error playing sound:", err))
+    if (effectsSettings.soundEnabled && acceptAudioRef.current) {
+      acceptAudioRef.current.currentTime = 0
+      acceptAudioRef.current.play().catch((err) => console.error("Error playing sound:", err))
     }
     if (effectsSettings.visualEnabled) {
       setShowConfetti(true)
@@ -156,9 +163,9 @@ export default function AdminValidationPage() {
   }, [effectsSettings])
 
   const triggerReject = useCallback(() => {
-    if (effectsSettings.soundEnabled) {
-      const audio = new Audio("/sound_effects/reject.mp3")
-      audio.play().catch((err) => console.error("Error playing sound:", err))
+    if (effectsSettings.soundEnabled && rejectAudioRef.current) {
+      rejectAudioRef.current.currentTime = 0
+      rejectAudioRef.current.play().catch((err) => console.error("Error playing sound:", err))
     }
     if (effectsSettings.visualEnabled) {
       setFlashCount((prev) => prev + 1)
