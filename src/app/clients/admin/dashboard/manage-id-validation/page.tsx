@@ -184,6 +184,13 @@ export default function AdminValidationPage() {
               recycle={false}
               numberOfPieces={500}
               gravity={0.3}
+              style={{
+                position: "fixed",
+                top: 0,
+                left: 0,
+                zIndex: 9999,
+                pointerEvents: "none",
+              }}
             />
           )}
 

@@ -49,6 +49,8 @@ interface Props {
   sortOrder: "asc" | "desc"
   onSortChange: (column: string, order: "asc" | "desc") => void
   loading: boolean
+  onAcceptSuccess: () => void
+  onRejectSuccess: () => void
 }
 
 export function IdValidationTable({
@@ -65,6 +67,8 @@ export function IdValidationTable({
   sortOrder,
   onSortChange,
   loading,
+  onAcceptSuccess,
+  onRejectSuccess,
 }: Props) {
   const [selected, setSelected] = useState<ValidationRequest | null>(null)
   const [open, setOpen] = useState(false)
@@ -185,6 +189,8 @@ export function IdValidationTable({
         onClose={() => setOpen(false)}
         request={selected}
         onUpdate={handleUpdate}
+        onAcceptSuccess={onAcceptSuccess}
+        onRejectSuccess={onRejectSuccess}
       />
     </>
   )

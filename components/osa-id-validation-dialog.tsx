@@ -15,12 +15,15 @@ import { Separator } from "@/components/ui/separator"
 import { ImagePreviewPanel } from "./osa-image-preview-panel"
 import { ValidationRequest } from "./osa-id-validation-table"
 import { toast } from "sonner"
+import { on } from "events"
 
 interface Props {
   open: boolean
   onClose: () => void
   request: ValidationRequest | null
   onUpdate: () => void
+  onAcceptSuccess: () => void
+  onRejectSuccess: () => void
 }
 
 export function IdValidationDialog({
@@ -28,6 +31,8 @@ export function IdValidationDialog({
   onClose,
   request,
   onUpdate,
+  onAcceptSuccess,
+  onRejectSuccess,
 }: Props) {
   const [previewImage, setPreviewImage] = useState<string | null>(null)
   const [previewTitle, setPreviewTitle] = useState("")
@@ -196,6 +201,7 @@ export function IdValidationDialog({
                           )
                           if (!res.ok) throw new Error()
                           toast.success("Request approved successfully")
+                          onAcceptSuccess()
                           onUpdate()
                           onClose()
                         } catch {
@@ -275,6 +281,7 @@ export function IdValidationDialog({
                   setRejectRemarks("")
                   onUpdate()
                   onClose()
+                  onRejectSuccess()
                 } catch {
                   toast.error("Failed to reject request")
                 } finally {
