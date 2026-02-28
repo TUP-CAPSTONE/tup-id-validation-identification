@@ -4,15 +4,17 @@ import { cookies } from "next/headers"
 
 /**
  * POST /api/admin/new-semester
- * Start a new semester by:
- * 1. Resetting all student isValidated fields to false
- * 2. Clearing validatedAt and validatedBy fields
- * 3. Clearing the current validation period
- * 4. Creating a backup log
+ *
+ * Starts a new semester by:
+ * 1. Checking for duplicate school year + semester combo (returns 409 if found)
+ * 2. Resetting all student isValidated fields to false
+ * 3. Clearing the current validation period and sticker claiming period
+ * 4. Saving the new semester info to system_settings/currentSemester
+ * 5. Appending to the semester history log
  */
 export async function POST(req: NextRequest) {
   try {
-    // Verify admin authentication
+    // ── Auth ────────────────────────────────────────────────────────────────
     const cookieStore = await cookies()
     const sessionCookie = cookieStore.get("admin_session")?.value
 
@@ -21,13 +23,15 @@ export async function POST(req: NextRequest) {
     }
 
     const decodedToken = await adminAuth.verifySessionCookie(sessionCookie, true)
-    
-    // Check if user is admin (via custom claims or Firestore)
+
     let isAdmin = false
     if (decodedToken.role === "admin") {
       isAdmin = true
     } else {
-      const userSnap = await adminDB.collection("users").doc(decodedToken.uid).get()
+      const userSnap = await adminDB
+        .collection("users")
+        .doc(decodedToken.uid)
+        .get()
       if (userSnap.exists && userSnap.data()?.role === "admin") {
         isAdmin = true
       }
@@ -37,19 +41,84 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    console.log("Starting new semester process...")
+    // ── Parse & validate body ────────────────────────────────────────────────
+    const { schoolYear, semester } = await req.json()
 
-    // Get current validation period for logging
-    const settingsRef = adminDB.collection("system_settings").doc("idValidation")
-    const settingsDoc = await settingsRef.get()
-    const previousPeriod = settingsDoc.exists ? settingsDoc.data() : null
+    if (!schoolYear || !semester) {
+      return NextResponse.json(
+        { error: "schoolYear and semester are required" },
+        { status: 400 }
+      )
+    }
 
-    // Step 1: Reset all student validation statuses
-    const studentsRef = adminDB.collection("student_profiles")
-    const studentsSnapshot = await studentsRef.get()
+    const schoolYearRegex = /^\d{4}-\d{4}$/
+    if (!schoolYearRegex.test(schoolYear)) {
+      return NextResponse.json(
+        { error: "schoolYear must be in YYYY-YYYY format (e.g. 2024-2025)" },
+        { status: 400 }
+      )
+    }
+
+    const [startYr, endYr] = schoolYear.split("-").map(Number)
+    if (endYr !== startYr + 1) {
+      return NextResponse.json(
+        { error: "School year must consist of consecutive years (e.g. 2024-2025)" },
+        { status: 400 }
+      )
+    }
+
+    if (!["1st", "2nd"].includes(semester)) {
+      return NextResponse.json(
+        { error: "semester must be '1st' or '2nd'" },
+        { status: 400 }
+      )
+    }
+
+    // ── Duplicate detection ──────────────────────────────────────────────────
+    // Check the semester history log for this exact combo
+    const semesterLogRef = adminDB
+      .collection("system_settings")
+      .doc("semesterLog")
+
+    const currentLog = await semesterLogRef.get()
+    const history: Array<{ schoolYear: string; semester: string }> =
+      currentLog.exists ? currentLog.data()?.history ?? [] : []
+
+    const isDuplicate = history.some(
+      (entry) => entry.schoolYear === schoolYear && entry.semester === semester
+    )
+
+    if (isDuplicate) {
+      return NextResponse.json(
+        {
+          error: `The ${semester} semester of school year ${schoolYear} has already been used. Please check the school year and semester.`,
+        },
+        { status: 409 }
+      )
+    }
+
+    console.log(`Starting new semester: ${semester} semester, ${schoolYear}`)
+
+    // ── Step 1: Snapshot previous periods for logging ────────────────────────
+    const validationDoc = await adminDB
+      .collection("system_settings")
+      .doc("idValidation")
+      .get()
+    const previousValidationPeriod = validationDoc.exists
+      ? validationDoc.data()
+      : null
+
+    const stickerDoc = await adminDB
+      .collection("system_settings")
+      .doc("stickerClaiming")
+      .get()
+    const previousStickerPeriod = stickerDoc.exists ? stickerDoc.data() : null
+
+    // ── Step 2: Reset all student validation statuses ────────────────────────
+    const studentsSnapshot = await adminDB.collection("student_profiles").get()
 
     let resetCount = 0
-    const batchSize = 500 // Firestore batch limit
+    const BATCH_LIMIT = 500
     let batch = adminDB.batch()
     let operationCount = 0
 
@@ -61,65 +130,94 @@ export async function POST(req: NextRequest) {
         validationResetAt: new Date().toISOString(),
         validationResetBy: "new_semester",
       })
-      
+
       resetCount++
       operationCount++
 
-      // Commit batch if we hit the limit
-      if (operationCount >= batchSize) {
+      if (operationCount >= BATCH_LIMIT) {
         await batch.commit()
-        console.log(`Committed batch of ${operationCount} updates`)
+        console.log(`Committed batch of ${operationCount} student resets`)
         batch = adminDB.batch()
         operationCount = 0
       }
     }
 
-    // Commit any remaining operations
     if (operationCount > 0) {
       await batch.commit()
-      console.log(`Committed final batch of ${operationCount} updates`)
+      console.log(`Committed final batch of ${operationCount} student resets`)
     }
 
     console.log(`Reset ${resetCount} student profiles`)
 
-    // Step 2: Clear validation period settings
-    await settingsRef.set(
-      {
-        startDate: "",
-        endDate: "",
-        clearedAt: new Date().toISOString(),
-        clearedBy: decodedToken.uid,
-        previousPeriod: previousPeriod,
-      },
-      { merge: true }
-    )
+    // ── Step 3: Clear validation period ─────────────────────────────────────
+    await adminDB
+      .collection("system_settings")
+      .doc("idValidation")
+      .set(
+        {
+          startDate: "",
+          endDate: "",
+          clearedAt: new Date().toISOString(),
+          clearedBy: decodedToken.uid,
+          previousPeriod: previousValidationPeriod,
+        },
+        { merge: true }
+      )
 
-    // Step 3: Log the semester reset
-    const semesterLogRef = adminDB.collection("system_settings").doc("semesterLog")
-    const currentLog = await semesterLogRef.get()
-    const existingHistory = currentLog.exists ? currentLog.data()?.history || [] : []
+    // ── Step 4: Clear sticker claiming period ────────────────────────────────
+    await adminDB
+      .collection("system_settings")
+      .doc("stickerClaiming")
+      .set(
+        {
+          startDate: "",
+          endDate: "",
+          clearedAt: new Date().toISOString(),
+          clearedBy: decodedToken.uid,
+          previousPeriod: previousStickerPeriod,
+        },
+        { merge: true }
+      )
 
+    // ── Step 5: Save new current semester ────────────────────────────────────
+    await adminDB
+      .collection("system_settings")
+      .doc("currentSemester")
+      .set({
+        schoolYear,
+        semester,
+        startedAt: new Date().toISOString(),
+        startedBy: decodedToken.uid,
+      })
+
+    // ── Step 6: Append to semester history log ───────────────────────────────
     await semesterLogRef.set({
       lastSemesterReset: new Date().toISOString(),
       lastResetBy: decodedToken.uid,
       lastResetCount: resetCount,
       history: [
-        ...existingHistory.slice(-9), // Keep last 10 entries
+        // Keep last 20 entries
+        ...history.slice(-19),
         {
+          schoolYear,
+          semester,
           timestamp: new Date().toISOString(),
           resetCount,
           performedBy: decodedToken.uid,
-          previousPeriod: previousPeriod,
+          previousValidationPeriod,
+          previousStickerPeriod,
         },
       ],
     })
 
-    console.log("New semester started successfully")
+    console.log(`New semester started: ${semester} semester, ${schoolYear}`)
 
     return NextResponse.json({
       success: true,
       resetCount,
-      message: `Successfully reset ${resetCount} student profiles for new semester`,
+      schoolYear,
+      semester,
+      message: `Successfully started ${semester} semester of ${schoolYear}. ${resetCount} student profiles have been reset.`,
     })
   } catch (error) {
     console.error("Error starting new semester:", error)

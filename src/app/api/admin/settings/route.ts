@@ -4,28 +4,31 @@ import { cookies } from "next/headers"
 
 /**
  * Helper: Parse datetime-local string as PHT (UTC+8) and return a proper UTC Date.
- * 
- * Vercel servers run in UTC, so new Date(year, month, day, hour, minute) would
- * treat the time as UTC — causing an 8-hour shift for Philippine users.
- * 
- * Instead, we manually apply the PHT offset (+8h) so the stored ISO string
- * always reflects the correct UTC equivalent of the local PH time entered.
- *
- * Example: user enters "3:36 PM" (PHT) → stored as "07:36:00Z" (UTC)
  */
 function parseLocalDateTimeAsPHT(dateTimeString: string): Date {
   const [datePart, timePart] = dateTimeString.split("T")
   const [year, month, day] = datePart.split("-").map(Number)
   const [hour, minute] = timePart.split(":").map(Number)
 
-  const PHT_OFFSET_MS = 8 * 60 * 60 * 1000 // UTC+8
+  const PHT_OFFSET_MS = 8 * 60 * 60 * 1000
 
-  // Build the timestamp as if it were UTC, then subtract 8 hours
-  // to get the correct UTC equivalent of the PHT time
   const utcMs =
     Date.UTC(year, month - 1, day, hour, minute) - PHT_OFFSET_MS
 
   return new Date(utcMs)
+}
+
+/**
+ * Helper: Convert stored UTC ISO string back to PHT datetime-local string.
+ */
+function toLocalPHTString(isoString?: string): string {
+  if (!isoString) return ""
+
+  const PHT_OFFSET_MS = 8 * 60 * 60 * 1000
+  const utcMs = new Date(isoString).getTime()
+  const phtDate = new Date(utcMs + PHT_OFFSET_MS)
+
+  return phtDate.toISOString().slice(0, 16)
 }
 
 /**
@@ -38,10 +41,7 @@ function isWithinPeriod(startDate?: string, endDate?: string): boolean {
   const start = new Date(startDate)
   const end = new Date(endDate)
 
-  return (
-    now.getTime() >= start.getTime() &&
-    now.getTime() <= end.getTime()
-  )
+  return now.getTime() >= start.getTime() && now.getTime() <= end.getTime()
 }
 
 /**
@@ -54,11 +54,31 @@ function formatBytes(bytes: number): string {
   const sizes = ["Bytes", "KB", "MB", "GB"]
   const i = Math.floor(Math.log(bytes) / Math.log(k))
 
-  return (
-    Math.round((bytes / Math.pow(k, i)) * 100) / 100 +
-    " " +
-    sizes[i]
-  )
+  return Math.round((bytes / Math.pow(k, i)) * 100) / 100 + " " + sizes[i]
+}
+
+/**
+ * Helper: Verify admin from session cookie. Returns decodedToken or throws.
+ */
+async function verifyAdmin(sessionCookie: string | undefined) {
+  if (!sessionCookie) return null
+
+  const decodedToken = await adminAuth.verifySessionCookie(sessionCookie, true)
+
+  let isAdmin = false
+  if (decodedToken.role === "admin") {
+    isAdmin = true
+  } else {
+    const userSnap = await adminDB
+      .collection("users")
+      .doc(decodedToken.uid)
+      .get()
+    if (userSnap.exists && userSnap.data()?.role === "admin") {
+      isAdmin = true
+    }
+  }
+
+  return isAdmin ? decodedToken : null
 }
 
 /**
@@ -73,57 +93,21 @@ export async function GET(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const decodedToken = await adminAuth.verifySessionCookie(sessionCookie, true)
-
-    // Admin check
-    let isAdmin = false
-
-    if (decodedToken.role === "admin") {
-      isAdmin = true
-    } else {
-      const userSnap = await adminDB
-        .collection("users")
-        .doc(decodedToken.uid)
-        .get()
-
-      if (userSnap.exists && userSnap.data()?.role === "admin") {
-        isAdmin = true
-      }
-    }
-
-    if (!isAdmin) {
+    const decodedToken = await verifyAdmin(sessionCookie)
+    if (!decodedToken) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // Fetch validation period
-    const settingsRef = adminDB
+    // ── Validation Period ──────────────────────────────────────────────────
+    const validationDoc = await adminDB
       .collection("system_settings")
       .doc("idValidation")
+      .get()
 
-    const settingsDoc = await settingsRef.get()
+    let validationPeriod = { startDate: "", endDate: "", isActive: false }
 
-    let validationPeriod = {
-      startDate: "",
-      endDate: "",
-      isActive: false,
-    }
-
-    if (settingsDoc.exists) {
-      const data = settingsDoc.data()
-
-      // Convert stored UTC ISO strings back to PHT for display in the frontend
-      // by adding 8 hours before formatting as datetime-local string
-      const toLocalPHTString = (isoString?: string): string => {
-        if (!isoString) return ""
-
-        const PHT_OFFSET_MS = 8 * 60 * 60 * 1000
-        const utcMs = new Date(isoString).getTime()
-        const phtDate = new Date(utcMs + PHT_OFFSET_MS)
-
-        // Return as datetime-local format: "YYYY-MM-DDTHH:mm"
-        return phtDate.toISOString().slice(0, 16)
-      }
-
+    if (validationDoc.exists) {
+      const data = validationDoc.data()
       validationPeriod = {
         startDate: toLocalPHTString(data?.startDate),
         endDate: toLocalPHTString(data?.endDate),
@@ -131,43 +115,71 @@ export async function GET(req: NextRequest) {
       }
     }
 
-    // Backup info
-    const idValidationsRef = adminDB.collection("validation_requests2")
-    const snapshot = await idValidationsRef.count().get()
+    // ── Sticker Claiming Period ────────────────────────────────────────────
+    const stickerDoc = await adminDB
+      .collection("system_settings")
+      .doc("stickerClaiming")
+      .get()
+
+    let stickerClaimingPeriod = { startDate: "", endDate: "", isActive: false }
+
+    if (stickerDoc.exists) {
+      const data = stickerDoc.data()
+      stickerClaimingPeriod = {
+        startDate: toLocalPHTString(data?.startDate),
+        endDate: toLocalPHTString(data?.endDate),
+        isActive: isWithinPeriod(data?.startDate, data?.endDate),
+      }
+    }
+
+    // ── Current Semester ───────────────────────────────────────────────────
+    const semesterDoc = await adminDB
+      .collection("system_settings")
+      .doc("currentSemester")
+      .get()
+
+    const currentSemester = semesterDoc.exists
+      ? {
+          schoolYear: semesterDoc.data()?.schoolYear ?? "",
+          semester: semesterDoc.data()?.semester ?? "",
+        }
+      : null
+
+    // ── Backup Info ────────────────────────────────────────────────────────
+    const snapshot = await adminDB
+      .collection("validation_requests2")
+      .count()
+      .get()
     const totalRecords = snapshot.data().count
 
-    const backupMetaRef = adminDB
+    const backupMetaDoc = await adminDB
       .collection("system_settings")
       .doc("backupMetadata")
-
-    const backupMetaDoc = await backupMetaRef.get()
+      .get()
 
     const lastBackup = backupMetaDoc.exists
       ? backupMetaDoc.data()?.lastBackup
       : null
 
-    const estimatedSizeKB = totalRecords * 2
-    const backupSize = formatBytes(estimatedSizeKB * 1024)
+    const backupSize = formatBytes(totalRecords * 2 * 1024)
 
     return NextResponse.json({
       validationPeriod,
-      backupInfo: {
-        lastBackup,
-        totalRecords,
-        backupSize,
-      },
+      stickerClaimingPeriod,
+      currentSemester,
+      backupInfo: { lastBackup, totalRecords, backupSize },
     })
   } catch (error) {
     console.error("Error fetching settings:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
 
 /**
  * POST /api/admin/settings
+ *
+ * Accepts either { validationPeriod } or { stickerClaimingPeriod } in the body
+ * so both can share this endpoint without touching each other's data.
  */
 export async function POST(req: NextRequest) {
   try {
@@ -178,78 +190,135 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
-    const decodedToken = await adminAuth.verifySessionCookie(sessionCookie, true)
-
-    // Admin check
-    let isAdmin = false
-
-    if (decodedToken.role === "admin") {
-      isAdmin = true
-    } else {
-      const userSnap = await adminDB
-        .collection("users")
-        .doc(decodedToken.uid)
-        .get()
-
-      if (userSnap.exists && userSnap.data()?.role === "admin") {
-        isAdmin = true
-      }
-    }
-
-    if (!isAdmin) {
+    const decodedToken = await verifyAdmin(sessionCookie)
+    if (!decodedToken) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    const { validationPeriod } = await req.json()
+    const body = await req.json()
 
-    if (
-      !validationPeriod ||
-      !validationPeriod.startDate ||
-      !validationPeriod.endDate
-    ) {
-      return NextResponse.json(
-        { error: "Start date and end date are required" },
-        { status: 400 }
-      )
+    // ── Handle Validation Period ───────────────────────────────────────────
+    if (body.validationPeriod) {
+      const { validationPeriod } = body
+
+      if (!validationPeriod.startDate || !validationPeriod.endDate) {
+        return NextResponse.json(
+          { error: "Start date and end date are required" },
+          { status: 400 }
+        )
+      }
+
+      const startUTC = parseLocalDateTimeAsPHT(validationPeriod.startDate)
+      const endUTC = parseLocalDateTimeAsPHT(validationPeriod.endDate)
+
+      if (endUTC.getTime() < startUTC.getTime()) {
+        return NextResponse.json(
+          { error: "End date must be after start date" },
+          { status: 400 }
+        )
+      }
+
+      await adminDB
+        .collection("system_settings")
+        .doc("idValidation")
+        .set(
+          {
+            startDate: startUTC.toISOString(),
+            endDate: endUTC.toISOString(),
+            updatedAt: new Date().toISOString(),
+            updatedBy: decodedToken.uid,
+          },
+          { merge: true }
+        )
+
+      return NextResponse.json({
+        success: true,
+        message: "Validation period updated successfully",
+      })
     }
 
-    // Parse as PHT (UTC+8) and convert to correct UTC
-    const startUTC = parseLocalDateTimeAsPHT(validationPeriod.startDate)
-    const endUTC = parseLocalDateTimeAsPHT(validationPeriod.endDate)
+    // ── Handle Sticker Claiming Period ─────────────────────────────────────
+    if (body.stickerClaimingPeriod) {
+      const { stickerClaimingPeriod } = body
 
-    if (endUTC.getTime() < startUTC.getTime()) {
-      return NextResponse.json(
-        { error: "End date must be after start date" },
-        { status: 400 }
-      )
+      if (!stickerClaimingPeriod.startDate || !stickerClaimingPeriod.endDate) {
+        return NextResponse.json(
+          { error: "Start date and end date are required" },
+          { status: 400 }
+        )
+      }
+
+      const stickerStartUTC = parseLocalDateTimeAsPHT(stickerClaimingPeriod.startDate)
+      const stickerEndUTC = parseLocalDateTimeAsPHT(stickerClaimingPeriod.endDate)
+
+      if (stickerEndUTC.getTime() <= stickerStartUTC.getTime()) {
+        return NextResponse.json(
+          { error: "End date must be after start date" },
+          { status: 400 }
+        )
+      }
+
+      // Cross-validate against the current validation period
+      const validationDoc = await adminDB
+        .collection("system_settings")
+        .doc("idValidation")
+        .get()
+
+      if (validationDoc.exists) {
+        const vData = validationDoc.data()
+
+        if (vData?.startDate) {
+          const validationStart = new Date(vData.startDate)
+          if (stickerStartUTC.getTime() < validationStart.getTime()) {
+            return NextResponse.json(
+              {
+                error:
+                  "Sticker claiming start date cannot be before the ID validation start date",
+              },
+              { status: 400 }
+            )
+          }
+        }
+
+        if (vData?.endDate) {
+          const validationEnd = new Date(vData.endDate)
+          if (stickerEndUTC.getTime() < validationEnd.getTime()) {
+            return NextResponse.json(
+              {
+                error:
+                  "Sticker claiming end date cannot be before the ID validation end date",
+              },
+              { status: 400 }
+            )
+          }
+        }
+      }
+
+      await adminDB
+        .collection("system_settings")
+        .doc("stickerClaiming")
+        .set(
+          {
+            startDate: stickerStartUTC.toISOString(),
+            endDate: stickerEndUTC.toISOString(),
+            updatedAt: new Date().toISOString(),
+            updatedBy: decodedToken.uid,
+          },
+          { merge: true }
+        )
+
+      return NextResponse.json({
+        success: true,
+        message: "Sticker claiming period updated successfully",
+      })
     }
 
-    const startISO = startUTC.toISOString()
-    const endISO = endUTC.toISOString()
-
-    const settingsRef = adminDB
-      .collection("system_settings")
-      .doc("idValidation")
-
-    await settingsRef.set(
-      {
-        startDate: startISO,
-        endDate: endISO,
-        updatedAt: new Date().toISOString(),
-        updatedBy: decodedToken.uid,
-      },
-      { merge: true }
+    return NextResponse.json(
+      { error: "No valid data provided" },
+      { status: 400 }
     )
-
-    return NextResponse.json({
-      success: true,
-      message: "Validation period updated successfully",
-    })
   } catch (error) {
     console.error("Error updating settings:", error)
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    )
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 })
   }
 }
