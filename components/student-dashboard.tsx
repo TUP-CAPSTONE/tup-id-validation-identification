@@ -7,8 +7,8 @@ import { Button } from "@/components/ui/button";
 import { Alert, AlertDescription } from "@/components/ui/alert";
 import { auth, db } from "@/lib/firebaseConfig";
 import { signOut } from "firebase/auth";
-import { collection, getDocs, query, where } from "firebase/firestore";
-import { ChevronDown, ChevronUp, AlertCircle, ArrowRight, CheckCircle2, Clock, FileWarning } from "lucide-react";
+import { collection, getDocs, query, where, doc, getDoc } from "firebase/firestore";
+import { ChevronDown, ChevronUp, AlertCircle, ArrowRight, CheckCircle2, Clock, FileWarning, BookOpen } from "lucide-react";
 
 export default function StudentDashboard() {
   const router = useRouter();
@@ -20,6 +20,8 @@ export default function StudentDashboard() {
     "not_submitted" | "pending" | "accepted" | "rejected"
   >("not_submitted");
   const [activeOffensesCount, setActiveOffensesCount] = useState(0);
+  const [schoolYear, setSchoolYear] = useState<string | null>(null);
+  const [semester, setSemester] = useState<string | null>(null);
 
   const fetchValidationStatus = async (uid: string) => {
     try {
@@ -74,6 +76,20 @@ export default function StudentDashboard() {
     }
   };
 
+  const fetchCurrentSemester = async () => {
+    try {
+      const docRef = doc(db, "system_settings", "currentSemester");
+      const docSnap = await getDoc(docRef);
+      if (docSnap.exists()) {
+        const data = docSnap.data();
+        setSchoolYear(data.schoolYear || null);
+        setSemester(data.semester || null);
+      }
+    } catch (err) {
+      console.error("Failed to fetch current semester:", err);
+    }
+  };
+
   /**
    * Sets up event listeners and loads initial data
    */
@@ -89,7 +105,8 @@ export default function StudentDashboard() {
       setUser(currentUser);
       await Promise.all([
         fetchValidationStatus(currentUser.uid),
-        fetchActiveOffenses(currentUser.uid)
+        fetchActiveOffenses(currentUser.uid),
+        fetchCurrentSemester(),
       ]);
     } catch (err: any) {
       handleErrors(err);
@@ -169,7 +186,7 @@ export default function StudentDashboard() {
 
   if (isLoading) {
     return (
-      <div className="flex items-center justify-center min-h-[400px]">
+      <div className="flex items-center justify-center min-h-100">
         <div className="text-center">
           <div className="animate-spin rounded-full h-12 w-12 border-b-4 border-[#b32032] mx-auto mb-4"></div>
           <p className="text-gray-600 font-medium">Loading your dashboard...</p>
@@ -216,17 +233,32 @@ export default function StudentDashboard() {
         </Alert>
       )}
 
-      <Card className="relative overflow-hidden border-none shadow-xl bg-gradient-to-br from-[#b32032] to-[#8b1828] text-white">
+      <Card className="relative overflow-hidden border-none shadow-xl bg-linear-to-br from-[#b32032] to-[#8b1828] text-white">
         <div className="absolute top-0 right-0 w-48 md:w-64 h-48 md:h-64 bg-white/10 rounded-full -mr-24 md:-mr-32 -mt-24 md:-mt-32" />
         <CardHeader className="relative space-y-2 p-4 md:p-6">
           <CardTitle className="text-xl md:text-3xl font-bold">Welcome back!</CardTitle>
           <CardDescription className="text-white/90 text-sm md:text-base">Manage your ID validation, feedback, and account information.</CardDescription>
         </CardHeader>
-        <CardContent className="relative p-4 md:p-6 pt-0 md:pt-0">
+        <CardContent className="relative p-4 md:p-6 pt-0 md:pt-0 flex flex-col sm:flex-row gap-3 sm:items-center sm:justify-between">
           <div className="flex flex-wrap gap-2 md:gap-3 items-center bg-white/15 border border-white/25 backdrop-blur-sm rounded-lg px-3 md:px-4 py-2 md:py-3 w-fit">
             <CheckCircle2 className="w-4 h-4 md:w-5 md:h-5" />
-            <p className="font-semibold text-sm md:text-base truncate max-w-[200px] md:max-w-none">{user?.email || "Student"}</p>
+            <p className="font-semibold text-sm md:text-base truncate max-w-50 md:max-w-none">{user?.email || "Student"}</p>
           </div>
+
+          {/* Current School Year & Semester Badge */}
+          {(schoolYear || semester) && (
+            <div className="flex items-center gap-3 bg-white text-[#b32032] rounded-xl px-4 md:px-6 py-3 md:py-4 shadow-lg w-fit border-2 border-white/80">
+              <BookOpen className="w-6 h-6 md:w-8 md:h-8 shrink-0 text-[#b32032]" />
+              <div>
+                {schoolYear && (
+                  <p className="text-xs md:text-sm font-semibold text-[#b32032]/70 leading-none uppercase tracking-wider">S.Y. {schoolYear}</p>
+                )}
+                {semester && (
+                  <p className="font-extrabold text-lg md:text-2xl leading-tight text-[#b32032]">{semester} Semester</p>
+                )}
+              </div>
+            </div>
+          )}
         </CardContent>
       </Card>
 
@@ -235,13 +267,13 @@ export default function StudentDashboard() {
           className="border-[#e9b3bd] shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer group"
           onClick={() => router.push("/clients/students/dashboard/validation-request")}
         >
-          <CardHeader className="bg-gradient-to-br from-[#fdf1f3] to-white p-4 md:p-6">
+          <CardHeader className="bg-linear-to-br from-[#fdf1f3] to-white p-4 md:p-6">
             <div className="flex items-start justify-between gap-3 md:gap-4">
               <div>
                 <CardTitle className="text-lg md:text-xl text-[#b32032] group-hover:text-[#8b1828] transition-colors">ID Validation Request</CardTitle>
                 <CardDescription className="mt-1 md:mt-2 text-sm">Submit or check your validation status</CardDescription>
               </div>
-              <ArrowRight className="w-5 h-5 md:w-6 md:h-6 text-[#b32032] group-hover:translate-x-1 transition-transform flex-shrink-0" />
+              <ArrowRight className="w-5 h-5 md:w-6 md:h-6 text-[#b32032] group-hover:translate-x-1 transition-transform shrink-0" />
             </div>
           </CardHeader>
           <CardContent className="p-4 md:p-6 pt-4 md:pt-6">
@@ -259,13 +291,13 @@ export default function StudentDashboard() {
           className="border-[#e9b3bd] shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer group"
           onClick={() => router.push("/clients/students/dashboard/user-info")}
         >
-          <CardHeader className="bg-gradient-to-br from-[#fdf1f3] to-white p-4 md:p-6">
+          <CardHeader className="bg-linear-to-br from-[#fdf1f3] to-white p-4 md:p-6">
             <div className="flex items-start justify-between gap-3 md:gap-4">
               <div>
                 <CardTitle className="text-lg md:text-xl text-[#b32032] group-hover:text-[#8b1828] transition-colors">User Information</CardTitle>
                 <CardDescription className="mt-1 md:mt-2 text-sm">View and update your profile</CardDescription>
               </div>
-              <ArrowRight className="w-5 h-5 md:w-6 md:h-6 text-[#b32032] group-hover:translate-x-1 transition-transform flex-shrink-0" />
+              <ArrowRight className="w-5 h-5 md:w-6 md:h-6 text-[#b32032] group-hover:translate-x-1 transition-transform shrink-0" />
             </div>
           </CardHeader>
           <CardContent className="p-4 md:p-6 pt-4 md:pt-6">
@@ -284,13 +316,13 @@ export default function StudentDashboard() {
           className={`border-[#e9b3bd] shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer group ${activeOffensesCount > 0 ? 'border-red-400' : ''}`}
           onClick={() => router.push("/clients/students/dashboard/osa-records")}
         >
-          <CardHeader className="bg-gradient-to-br from-[#fdf1f3] to-white p-4 md:p-6">
+          <CardHeader className="bg-linear-to-br from-[#fdf1f3] to-white p-4 md:p-6">
             <div className="flex items-start justify-between gap-3 md:gap-4">
               <div>
                 <CardTitle className="text-lg md:text-xl text-[#b32032] group-hover:text-[#8b1828] transition-colors">My Offenses</CardTitle>
                 <CardDescription className="mt-1 md:mt-2 text-sm">View your OSA disciplinary records</CardDescription>
               </div>
-              <ArrowRight className="w-5 h-5 md:w-6 md:h-6 text-[#b32032] group-hover:translate-x-1 transition-transform flex-shrink-0" />
+              <ArrowRight className="w-5 h-5 md:w-6 md:h-6 text-[#b32032] group-hover:translate-x-1 transition-transform shrink-0" />
             </div>
           </CardHeader>
           <CardContent className="p-4 md:p-6 pt-4 md:pt-6">
@@ -313,13 +345,13 @@ export default function StudentDashboard() {
           className="border-[#e9b3bd] shadow-md hover:shadow-xl transition-all duration-300 cursor-pointer group"
           onClick={() => router.push("/clients/students/dashboard/feedback-reports")}
         >
-          <CardHeader className="bg-gradient-to-br from-[#fdf1f3] to-white p-4 md:p-6">
+          <CardHeader className="bg-linear-to-br from-[#fdf1f3] to-white p-4 md:p-6">
             <div className="flex items-start justify-between gap-3 md:gap-4">
               <div>
                 <CardTitle className="text-lg md:text-xl text-[#b32032] group-hover:text-[#8b1828] transition-colors">Give Feedback</CardTitle>
                 <CardDescription className="mt-1 md:mt-2 text-sm">Share your experience and suggestions</CardDescription>
               </div>
-              <ArrowRight className="w-5 h-5 md:w-6 md:h-6 text-[#b32032] group-hover:translate-x-1 transition-transform flex-shrink-0" />
+              <ArrowRight className="w-5 h-5 md:w-6 md:h-6 text-[#b32032] group-hover:translate-x-1 transition-transform shrink-0" />
             </div>
           </CardHeader>
         </Card>

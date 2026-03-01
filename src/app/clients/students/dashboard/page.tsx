@@ -17,7 +17,7 @@ export default function DashboardPage() {
       <AppSidebar />
       <SidebarInset>
         <header className="bg-linear-to-b from-[#c62c3f] to-[#b32032] text-white sticky top-0 z-40 flex h-20 items-center shadow-md px-4">
-          <SidebarTrigger className="md:hidden mr-3 size-10 rounded-full bg-white text-[#b32032] hover:bg-gray-100 transition flex-shrink-0 shadow-md border border-white/50" />
+          <SidebarTrigger className="md:hidden mr-3 size-10 rounded-full bg-white text-[#b32032] hover:bg-gray-100 transition shrink-0 shadow-md border border-white/50" />
           <div className="flex-1 flex justify-center md:justify-center">
             <Breadcrumb>
               <BreadcrumbList>
