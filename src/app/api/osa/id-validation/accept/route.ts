@@ -9,8 +9,8 @@ import {
   calculateExpirationDate,
 } from "@/lib/qr-utils"
 import { buildValidationEmailHTML } from "@/lib/email-templates/validation-accept-email"
+import { assignClaimSchedule } from "@/lib/schedule-utils"
 
-// Optional: Import rate limiting only if Upstash is configured
 let rateLimiters: any = null
 let checkRateLimit: any = null
 let createRateLimitHeaders: any = null
@@ -26,15 +26,15 @@ try {
 
 export async function POST(req: Request) {
   try {
-    const { requestId, expirationDays = 7 } = await req.json()
+    const { requestId } = await req.json()
 
-    console.log("📝 Accept request:", { requestId, expirationDays })
+    const QR_EXPIRATION_DAYS = 2
+
+    console.log("📝 Accept request:", { requestId })
 
     if (!requestId) {
       return NextResponse.json({ error: "Missing requestId" }, { status: 400 })
     }
-
-    const validExpirationDays = Math.min(Math.max(expirationDays, 1), 30)
 
     // 🔐 OSA/Admin session check
     const cookieStore = await cookies()
@@ -43,7 +43,6 @@ export async function POST(req: Request) {
       cookieStore.get("osa_session")?.value
 
     if (!adminSession) {
-      console.error("❌ No admin/OSA session found")
       return NextResponse.json({ error: "Unauthorized" }, { status: 401 })
     }
 
@@ -55,13 +54,9 @@ export async function POST(req: Request) {
       adminUserId = decoded.uid
       const adminUser = await adminAuth.getUser(adminUserId)
       adminName = adminUser.displayName || adminUser.email || "Admin"
-      console.log("✅ Admin authenticated:", adminName)
+      console.log("✅ OSA authenticated:", adminName)
     } catch (authError: any) {
-      console.error("❌ Auth error:", authError)
-      return NextResponse.json(
-        { error: "Authentication failed" },
-        { status: 401 }
-      )
+      return NextResponse.json({ error: "Authentication failed" }, { status: 401 })
     }
 
     // ⚡ Rate limiting (optional)
@@ -100,18 +95,13 @@ export async function POST(req: Request) {
     const requestSnap = await requestRef.get()
 
     if (!requestSnap.exists) {
-      console.error("❌ Request not found:", requestId)
       return NextResponse.json({ error: "Request not found" }, { status: 404 })
     }
 
     const requestData = requestSnap.data()!
 
     if (requestData.status !== "pending") {
-      console.error("❌ Request already processed:", requestData.status)
-      return NextResponse.json(
-        { error: "Request already processed" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Request already processed" }, { status: 400 })
     }
 
     const studentId =
@@ -130,20 +120,28 @@ export async function POST(req: Request) {
     const section = requestData.section || "N/A"
 
     if (!studentId) {
-      return NextResponse.json(
-        { error: "Student ID not found in request" },
-        { status: 400 }
-      )
+      return NextResponse.json({ error: "Student ID not found in request" }, { status: 400 })
     }
 
     if (!studentEmail) {
+      return NextResponse.json({ error: "Student email not found in request" }, { status: 400 })
+    }
+
+    // 📅 Assign sticker claiming schedule (FCFS)
+    const scheduleResult = await assignClaimSchedule()
+
+    if (!scheduleResult.success) {
+      // Return the specific error reason so the dialog can show the right message
       return NextResponse.json(
-        { error: "Student email not found in request" },
-        { status: 400 }
+        { error: "no_claim_slots", detail: scheduleResult.error },
+        { status: 409 }
       )
     }
 
-    // 🎫 Generate QR Code
+    const claimSchedule = scheduleResult.schedule
+    console.log("📅 Assigned claim schedule:", claimSchedule.slotKey)
+
+    // 🎫 Generate QR Code (2-day expiration)
     const qrToken = generateQRToken()
     const qrData = createQRData(studentId, qrToken)
 
@@ -157,13 +155,12 @@ export async function POST(req: Request) {
       )
     }
 
-    const expirationDate = calculateExpirationDate(validExpirationDays)
+    const expirationDate = calculateExpirationDate(QR_EXPIRATION_DAYS)
     const now = new Date()
 
     // 🚀 Batch writes
     const batch = adminDB.batch()
 
-    // Store QR code
     const qrCodeRef = adminDB.collection("validation_qr_codes").doc()
     batch.set(qrCodeRef, {
       studentId,
@@ -172,9 +169,14 @@ export async function POST(req: Request) {
       isUsed: false,
       createdAt: now,
       studentInfo: { tupId, name: studentName, course, section },
+      claimSchedule: {
+        slotKey: claimSchedule.slotKey,
+        date: claimSchedule.date,
+        dateLabel: claimSchedule.dateLabel,
+        timeSlotLabel: claimSchedule.timeSlot.label,
+      },
     })
 
-    // Update validation request
     batch.update(requestRef, {
       status: "accepted",
       acceptedAt: FieldValue.serverTimestamp(),
@@ -182,9 +184,14 @@ export async function POST(req: Request) {
       reviewedBy: adminName,
       qrCodeId: qrCodeRef.id,
       expiresAt: expirationDate,
+      claimSchedule: {
+        slotKey: claimSchedule.slotKey,
+        date: claimSchedule.date,
+        dateLabel: claimSchedule.dateLabel,
+        timeSlotLabel: claimSchedule.timeSlot.label,
+      },
     })
 
-    // ✅ Update isValidated on student profile
     const studentProfileRef = adminDB.collection("student_profiles").doc(studentId)
     batch.update(studentProfileRef, {
       isValidated: true,
@@ -192,16 +199,18 @@ export async function POST(req: Request) {
       lastValidatedBy: adminName,
     })
 
-    // 📩 Queue email
     const validationRules = [
       "Save or print this email containing your QR code",
-      "Visit the Office of Student Affairs (OSA) during office hours",
+      `<b>Report to the Office of Student Affairs (OSA) on your assigned schedule:</b><br/>📅 <b>${claimSchedule.dateLabel}</b><br/>⏰ <b>${claimSchedule.timeSlot.label}</b>`,
       "Present your original Student ID and Certificate of Registration (COR)",
-      "Show this QR code to the OSA staff for scanning",
-      `Complete the validation process before <b>${expirationDate.toLocaleDateString(
-        "en-US",
-        { year: "numeric", month: "long", day: "numeric" }
-      )}</b>`,
+      "Show this QR code to the OSA staff for scanning to claim your ID sticker",
+      `⚠️ This QR code expires on <b>${expirationDate.toLocaleDateString("en-US", {
+        year: "numeric",
+        month: "long",
+        day: "numeric",
+        hour: "2-digit",
+        minute: "2-digit",
+      })}</b>. Claim your sticker within your assigned schedule.`,
     ]
 
     const emailHTML = buildValidationEmailHTML({
@@ -215,6 +224,10 @@ export async function POST(req: Request) {
         minute: "2-digit",
       }),
       validationRules,
+      claimSchedule: {
+        dateLabel: claimSchedule.dateLabel,
+        timeSlotLabel: claimSchedule.timeSlot.label,
+      },
     })
 
     const base64Data = qrCodeDataURL.replace(/^data:image\/png;base64,/, "")
@@ -222,7 +235,7 @@ export async function POST(req: Request) {
     batch.set(adminDB.collection("mail").doc(), {
       to: studentEmail,
       message: {
-        subject: "ID Validation Approved - Action Required",
+        subject: "ID Validation Approved – Your Sticker Claiming Schedule",
         html: emailHTML,
         attachments: [
           {
@@ -244,7 +257,16 @@ export async function POST(req: Request) {
         : {}
 
     return NextResponse.json(
-      { success: true, qrCodeId: qrCodeRef.id, expiresAt: expirationDate.toISOString() },
+      {
+        success: true,
+        qrCodeId: qrCodeRef.id,
+        expiresAt: expirationDate.toISOString(),
+        claimSchedule: {
+          dateLabel: claimSchedule.dateLabel,
+          timeSlotLabel: claimSchedule.timeSlot.label,
+          slotKey: claimSchedule.slotKey,
+        },
+      },
       { headers: responseHeaders }
     )
   } catch (error: any) {

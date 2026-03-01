@@ -3,10 +3,14 @@ export interface ValidationEmailParams {
   studentId: string
   expirationDate: string
   validationRules: string[]
+  claimSchedule?: {
+    dateLabel: string
+    timeSlotLabel: string
+  }
 }
 
 export function buildValidationEmailHTML(params: ValidationEmailParams): string {
-  const { studentName, studentId, expirationDate, validationRules } = params
+  const { studentName, studentId, expirationDate, validationRules, claimSchedule } = params
 
   return `
     <div style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">
@@ -32,33 +36,52 @@ export function buildValidationEmailHTML(params: ValidationEmailParams): string 
             Congratulations! Your ID validation request for <b>${studentId}</b> has been approved by the Office of Student Affairs (OSA).
           </div>
 
+          ${claimSchedule ? `
+          <!-- Sticker Claiming Schedule -->
+          <div style="margin-top:24px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2px solid #86efac;border-radius:16px;padding:22px;text-align:center;">
+            <div style="font-size:15px;color:#15803d;font-weight:800;margin-bottom:14px;">
+              🗓️ Your Sticker Claiming Schedule
+            </div>
+            <div style="display:inline-block;background:#ffffff;border-radius:12px;padding:16px 28px;box-shadow:0 2px 8px rgba(0,0,0,0.07);">
+              <div style="font-size:18px;font-weight:900;color:#166534;margin-bottom:6px;">
+                ${claimSchedule.dateLabel}
+              </div>
+              <div style="font-size:15px;font-weight:700;color:#15803d;">
+                ⏰ ${claimSchedule.timeSlotLabel}
+              </div>
+            </div>
+            <div style="margin-top:14px;font-size:12px;color:#166534;line-height:1.6;">
+              Please report to the <b>Office of Student Affairs (OSA)</b> on the date and time above to claim your ID sticker.
+            </div>
+          </div>
+          ` : ''}
+
           <!-- QR Code Section -->
           <div style="margin-top:24px;text-align:center;background:#f8fafc;border-radius:16px;padding:24px;border:2px dashed #cbd5e1;">
             <div style="font-size:15px;color:#0f172a;font-weight:700;margin-bottom:14px;">
               📱 Your Validation QR Code
             </div>
             <img 
-  src="cid:qrcode@validation" 
-  alt="Validation QR Code" 
-  width="280"
-  style="
-    display:block;
-    width:100%;
-    max-width:280px;
-    height:auto;
-    border-radius:12px;
-    background:#fff;
-    padding:12px;
-    box-shadow:0 4px 10px rgba(0,0,0,0.08);
-    margin:0 auto;
-  " 
-/>
-
+              src="cid:qrcode@validation" 
+              alt="Validation QR Code" 
+              width="280"
+              style="
+                display:block;
+                width:100%;
+                max-width:280px;
+                height:auto;
+                border-radius:12px;
+                background:#fff;
+                padding:12px;
+                box-shadow:0 4px 10px rgba(0,0,0,0.08);
+                margin:0 auto;
+              " 
+            />
             <div style="margin-top:16px;font-size:13px;color:#64748b;line-height:1.6;">
               <b>Student ID:</b> ${studentId}
             </div>
             <div style="margin-top:8px;font-size:12px;color:#ef4444;font-weight:600;">
-              ⏰ Expires on: ${expirationDate}
+              ⏰ QR Code Expires on: ${expirationDate}
             </div>
           </div>
 
@@ -79,9 +102,9 @@ export function buildValidationEmailHTML(params: ValidationEmailParams): string 
             </div>
             <ul style="margin:0;padding-left:20px;color:#78350f;font-size:12px;line-height:1.7;">
               <li>Do not share this QR code with anyone</li>
-              <li>The QR code can only be used once</li>
+              <li>The QR code can only be used once and expires in 2 days</li>
               <li>Bring your original ID and COR to the OSA</li>
-              <li>Visit the OSA before the expiration date</li>
+              ${claimSchedule ? `<li>You <b>must</b> arrive within your assigned time slot: <b>${claimSchedule.timeSlotLabel}</b></li>` : ''}
             </ul>
           </div>
 

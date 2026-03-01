@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import Image from "next/image"
-import { X } from "lucide-react"
+import { X, CalendarX } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -12,10 +12,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { ImagePreviewPanel } from "./osa-image-preview-panel"
 import { ValidationRequest } from "./osa-id-validation-table"
 import { toast } from "sonner"
-import { on } from "events"
+
+type ClaimPeriodError =
+  | { reason: "not_set" }
+  | { reason: "expired"; endDate: string }
 
 interface Props {
   open: boolean
@@ -39,27 +43,23 @@ export function IdValidationDialog({
   const [showRejectDialog, setShowRejectDialog] = useState(false)
   const [rejectRemarks, setRejectRemarks] = useState("")
   const [processing, setProcessing] = useState(false)
+  const [claimError, setClaimError] = useState<ClaimPeriodError | null>(null)
 
-  // Clear preview when dialog closes
   useEffect(() => {
     if (!open) {
       setPreviewImage(null)
       setPreviewTitle("")
+      setClaimError(null)
     }
   }, [open])
 
-  // Preload images
   useEffect(() => {
     if (!request) return
-
     const images = [
       request.idPicture,
       request.corFile,
-      ...(request.selfiePictures
-        ? Object.values(request.selfiePictures)
-        : []),
+      ...(request.selfiePictures ? Object.values(request.selfiePictures) : []),
     ].filter(Boolean) as string[]
-
     images.forEach((src) => {
       const img = new window.Image()
       img.src = src
@@ -80,12 +80,64 @@ export function IdValidationDialog({
 
   if (!request) return null
 
-  const isFinalized =
-    request.status === "accepted" || request.status === "rejected"
+  const isFinalized = request.status === "accepted" || request.status === "rejected"
 
   const openPreview = (img: string, title: string) => {
     setPreviewImage(img)
     setPreviewTitle(title)
+  }
+
+  const handleAccept = async () => {
+    setProcessing(true)
+    setClaimError(null)
+    try {
+      const res = await fetch("/api/osa/id-validation/accept", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ requestId: request.id }),
+      })
+
+      if (res.status === 409) {
+        const body = await res.json()
+        setClaimError(body.detail ?? { reason: "not_set" })
+        return
+      }
+
+      if (!res.ok) throw new Error()
+      toast.success("Request approved successfully")
+      onAcceptSuccess()
+      onUpdate()
+      onClose()
+    } catch {
+      toast.error("Failed to approve request")
+    } finally {
+      setProcessing(false)
+    }
+  }
+
+  const handleReject = async () => {
+    setProcessing(true)
+    try {
+      const res = await fetch("/api/osa/id-validation/reject", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          requestId: request.id,
+          rejectRemarks: rejectRemarks.trim(),
+        }),
+      })
+      if (!res.ok) throw new Error()
+      toast.success("Request rejected successfully")
+      setShowRejectDialog(false)
+      setRejectRemarks("")
+      onUpdate()
+      onClose()
+      onRejectSuccess()
+    } catch {
+      toast.error("Failed to reject request")
+    } finally {
+      setProcessing(false)
+    }
   }
 
   return (
@@ -98,12 +150,8 @@ export function IdValidationDialog({
           onEscapeKeyDown={(e) => e.preventDefault()}
           onPointerDownOutside={(e) => e.preventDefault()}
         >
-          {/* Main Form Card - Fixed Width */}
           <div className="relative w-full">
-            
-            {/* 1. ACTUAL FORM CARD */}
             <div className="w-full max-h-[85vh] flex flex-col overflow-hidden rounded-lg border bg-background shadow-lg">
-              {/* Header */}
               <div className="p-6 pb-2">
                 <DialogHeader className="flex flex-row items-center justify-between space-y-0">
                   <DialogTitle>ID Validation Review</DialogTitle>
@@ -119,9 +167,7 @@ export function IdValidationDialog({
                 </DialogHeader>
               </div>
 
-              {/* Scrollable Content Area */}
               <div className="flex-1 overflow-y-auto p-6 pt-2">
-                {/* STUDENT INFO */}
                 <div className="grid grid-cols-2 gap-4 text-sm mt-2">
                   <Info label="Student Name" value={request.studentName} />
                   <Info label="Requested At" value={formattedRequestedAt} />
@@ -136,27 +182,15 @@ export function IdValidationDialog({
 
                 <Separator className="my-4" />
 
-                {/* IMAGES */}
                 <div className="space-y-4">
                   <h3 className="font-semibold text-sm">Submitted Images</h3>
-
                   <div className="grid grid-cols-5 gap-4">
                     {request.idPicture && (
-                      <ImageBox
-                        label="TUP ID"
-                        src={request.idPicture}
-                        onClick={openPreview}
-                      />
+                      <ImageBox label="TUP ID" src={request.idPicture} onClick={openPreview} />
                     )}
-
                     {request.corFile && (
-                      <ImageBox
-                        label="COR"
-                        src={request.corFile}
-                        onClick={openPreview}
-                      />
+                      <ImageBox label="COR" src={request.corFile} onClick={openPreview} />
                     )}
-
                     {request.selfiePictures &&
                       Object.entries(request.selfiePictures).map(
                         ([key, img]) =>
@@ -174,7 +208,46 @@ export function IdValidationDialog({
 
                 <Separator className="my-4" />
 
-                {/* ACTIONS */}
+                {/* ⚠️ CLAIM PERIOD ERROR BANNER — OSA VERSION */}
+                {claimError && (
+                  <Alert variant="destructive" className="mb-4">
+                    <CalendarX className="h-4 w-4" />
+                    <AlertTitle>
+                      {claimError.reason === "not_set"
+                        ? "Sticker Claiming Period Not Yet Set"
+                        : "Sticker Claiming Period Has Ended"}
+                    </AlertTitle>
+                    <AlertDescription className="mt-1 space-y-2 text-sm">
+                      {claimError.reason === "not_set" ? (
+                        <>
+                          <p>
+                            No sticker claiming schedule has been configured yet.
+                            Students cannot be assigned a claiming slot until the
+                            Admin sets a valid period.
+                          </p>
+                          <p className="font-medium">
+                            Please contact the <strong>Admin</strong> to set the
+                            sticker claiming start and end date before approving
+                            requests.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p>
+                            The sticker claiming period ended on{" "}
+                            <strong>{(claimError as { reason: "expired"; endDate: string }).endDate}</strong>.
+                            No more claiming slots are available within that period.
+                          </p>
+                          <p className="font-medium">
+                            Please contact the <strong>Admin</strong> to extend
+                            the claiming period before approving more requests.
+                          </p>
+                        </>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
+
                 {!isFinalized && (
                   <div className="flex justify-end gap-3">
                     <Button
@@ -184,32 +257,10 @@ export function IdValidationDialog({
                     >
                       Reject
                     </Button>
-
                     <Button
                       className="bg-green-600 hover:bg-green-700"
-                      disabled={processing}
-                      onClick={async () => {
-                        setProcessing(true)
-                        try {
-                          const res = await fetch(
-                            "/api/osa/id-validation/accept",
-                            {
-                              method: "POST",
-                              headers: { "Content-Type": "application/json" },
-                              body: JSON.stringify({ requestId: request.id }),
-                            }
-                          )
-                          if (!res.ok) throw new Error()
-                          toast.success("Request approved successfully")
-                          onAcceptSuccess()
-                          onUpdate()
-                          onClose()
-                        } catch {
-                          toast.error("Failed to approve request")
-                        } finally {
-                          setProcessing(false)
-                        }
-                      }}
+                      disabled={processing || claimError !== null}
+                      onClick={handleAccept}
                     >
                       {processing ? "Processing..." : "Accept"}
                     </Button>
@@ -218,7 +269,6 @@ export function IdValidationDialog({
               </div>
             </div>
 
-            {/* 2. IMAGE PREVIEW PANEL (Absolutely Positioned) */}
             {previewImage && (
               <div className="absolute left-[calc(100%+1.5rem)] top-0 w-100 shrink-0 animate-in fade-in slide-in-from-left-4 duration-300">
                 <ImagePreviewPanel
@@ -230,7 +280,6 @@ export function IdValidationDialog({
                 />
               </div>
             )}
-
           </div>
         </DialogContent>
       </Dialog>
@@ -261,33 +310,7 @@ export function IdValidationDialog({
             <Button
               variant="destructive"
               disabled={!rejectRemarks.trim() || processing}
-              onClick={async () => {
-                setProcessing(true)
-                try {
-                  const res = await fetch(
-                    "/api/osa/id-validation/reject",
-                    {
-                      method: "POST",
-                      headers: { "Content-Type": "application/json" },
-                      body: JSON.stringify({ 
-                        requestId: request.id,
-                        rejectRemarks: rejectRemarks.trim()
-                      }),
-                    }
-                  )
-                  if (!res.ok) throw new Error()
-                  toast.success("Request rejected successfully")
-                  setShowRejectDialog(false)
-                  setRejectRemarks("")
-                  onUpdate()
-                  onClose()
-                  onRejectSuccess()
-                } catch {
-                  toast.error("Failed to reject request")
-                } finally {
-                  setProcessing(false)
-                }
-              }}
+              onClick={handleReject}
             >
               {processing ? "Processing..." : "Confirm Rejection"}
             </Button>
@@ -298,19 +321,15 @@ export function IdValidationDialog({
   )
 }
 
-/* HELPERS */
 function Info({ label, value }: { label: string; value: string }) {
   return (
     <div className="space-y-1">
-      <p className="font-semibold text-xs text-muted-foreground uppercase">
-        {label}
-      </p>
+      <p className="font-semibold text-xs text-muted-foreground uppercase">{label}</p>
       <p className="text-sm font-medium">{value}</p>
     </div>
   )
 }
 
-// ⭐ UPDATED ImageBox with cache-busting and error handling
 function ImageBox({
   label,
   src,
@@ -321,10 +340,10 @@ function ImageBox({
   onClick: (src: string, title: string) => void
 }) {
   const [imageError, setImageError] = useState(false)
-  
-  // Add cache-busting if URL doesn't already have query params
-  const srcWithCacheBust = src.includes('?t=') ? src : `${src}${src.includes('?') ? '&' : '?'}t=${Date.now()}`
-  
+  const srcWithCacheBust = src.includes("?t=")
+    ? src
+    : `${src}${src.includes("?") ? "&" : "?"}t=${Date.now()}`
+
   return (
     <div className="space-y-1 text-center group">
       <p className="text-[10px] font-bold uppercase truncate">{label}</p>
@@ -341,11 +360,11 @@ function ImageBox({
             </p>
           </div>
         ) : (
-          <Image 
+          <Image
             src={srcWithCacheBust}
-            alt={label} 
-            fill 
-            priority 
+            alt={label}
+            fill
+            priority
             className="object-cover"
             onError={() => setImageError(true)}
             unoptimized

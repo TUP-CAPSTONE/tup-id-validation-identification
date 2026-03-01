@@ -2,7 +2,7 @@
 
 import { useState, useMemo, useEffect } from "react"
 import Image from "next/image"
-import { X } from "lucide-react"
+import { X, CalendarX, Settings } from "lucide-react"
 import { Button } from "@/components/ui/button"
 import { Textarea } from "@/components/ui/textarea"
 import {
@@ -12,9 +12,14 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog"
 import { Separator } from "@/components/ui/separator"
+import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert"
 import { ImagePreviewPanel } from "./osa-image-preview-panel"
 import { ValidationRequest } from "./admin-id-validation-table"
 import { toast } from "sonner"
+
+type ClaimPeriodError =
+  | { reason: "not_set" }
+  | { reason: "expired"; endDate: string }
 
 interface Props {
   open: boolean
@@ -38,11 +43,13 @@ export function AdminIdValidationDialog({
   const [showRejectDialog, setShowRejectDialog] = useState(false)
   const [rejectRemarks, setRejectRemarks] = useState("")
   const [processing, setProcessing] = useState(false)
+  const [claimError, setClaimError] = useState<ClaimPeriodError | null>(null)
 
   useEffect(() => {
     if (!open) {
       setPreviewImage(null)
       setPreviewTitle("")
+      setClaimError(null)
     }
   }, [open])
 
@@ -82,6 +89,7 @@ export function AdminIdValidationDialog({
 
   const handleAccept = async () => {
     setProcessing(true)
+    setClaimError(null)
     try {
       const resolvedId = request.id ?? request.requestId
       const res = await fetch("/api/admin/id-validation/accept", {
@@ -89,9 +97,16 @@ export function AdminIdValidationDialog({
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ requestId: resolvedId }),
       })
+
+      if (res.status === 409) {
+        const body = await res.json()
+        setClaimError(body.detail ?? { reason: "not_set" })
+        return
+      }
+
       if (!res.ok) throw new Error()
       toast.success("Request approved successfully")
-      onAcceptSuccess() // 🎉 triggers confetti + sound in the page
+      onAcceptSuccess()
       onUpdate()
       onClose()
     } catch {
@@ -115,7 +130,7 @@ export function AdminIdValidationDialog({
       })
       if (!res.ok) throw new Error()
       toast.success("Request rejected successfully")
-      onRejectSuccess() // 🚨 triggers red flash + sound in the page
+      onRejectSuccess()
       setShowRejectDialog(false)
       setRejectRemarks("")
       onUpdate()
@@ -195,6 +210,45 @@ export function AdminIdValidationDialog({
                 </div>
 
                 <Separator className="my-4" />
+
+                {/* ⚠️ CLAIM PERIOD ERROR BANNER — ADMIN VERSION */}
+                {claimError && (
+                  <Alert variant="destructive" className="mb-4">
+                    <CalendarX className="h-4 w-4" />
+                    <AlertTitle>
+                      {claimError.reason === "not_set"
+                        ? "Sticker Claiming Period Not Yet Set"
+                        : "Sticker Claiming Period Has Ended"}
+                    </AlertTitle>
+                    <AlertDescription className="mt-1 space-y-2 text-sm">
+                      {claimError.reason === "not_set" ? (
+                        <>
+                          <p>
+                            No sticker claiming schedule has been configured yet.
+                            Students cannot be assigned a claiming slot until a
+                            valid period is set.
+                          </p>
+                          <p className="font-medium flex items-center gap-1">
+                            <Settings className="h-3.5 w-3.5 shrink-0" />
+                            Go to <strong>System Settings → Sticker Claiming</strong> and set a start and end date to continue.
+                          </p>
+                        </>
+                      ) : (
+                        <>
+                          <p>
+                            The sticker claiming period ended on{" "}
+                            <strong>{(claimError as { reason: "expired"; endDate: string }).endDate}</strong>.
+                            All slots within that period are no longer available.
+                          </p>
+                          <p className="font-medium flex items-center gap-1">
+                            <Settings className="h-3.5 w-3.5 shrink-0" />
+                            Go to <strong>System Settings → Sticker Claiming</strong> and extend the end date to continue approving requests.
+                          </p>
+                        </>
+                      )}
+                    </AlertDescription>
+                  </Alert>
+                )}
 
                 {!isFinalized && (
                   <div className="flex justify-end gap-3">
