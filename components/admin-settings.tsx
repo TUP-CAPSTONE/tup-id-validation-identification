@@ -97,6 +97,7 @@ export function AdminSettings() {
     semester: "",
   });
   const [autoDetectedSemester, setAutoDetectedSemester] = useState<SemesterInfo | null>(null);
+  const [currentSemester, setCurrentSemester] = useState<SemesterInfo | null>(null);
   const [semesterConflictError, setSemesterConflictError] = useState<string | null>(null);
 
   // Sticker period validation errors
@@ -139,6 +140,7 @@ export function AdminSettings() {
 
       // Auto-detect next semester from previous
       if (data.currentSemester) {
+        setCurrentSemester(data.currentSemester);
         const prev: SemesterInfo = data.currentSemester;
         let nextSemester: "1st" | "2nd" = "1st";
         let nextSchoolYear = prev.schoolYear;
@@ -555,6 +557,34 @@ export function AdminSettings() {
 
   return (
     <div className="space-y-6">
+      {/* Current Semester Banner */}
+      {currentSemester && currentSemester.schoolYear && currentSemester.semester && (
+        <div className="flex items-center gap-3 px-5 py-4 rounded-xl border border-indigo-200 bg-indigo-50">
+          <div className="flex items-center justify-center w-10 h-10 rounded-full bg-indigo-100 shrink-0">
+            <Calendar className="h-5 w-5 text-indigo-600" />
+          </div>
+          <div>
+            <p className="text-xs font-medium text-indigo-500 uppercase tracking-wide">
+              Current Semester
+            </p>
+            <p className="text-lg font-bold text-indigo-900 leading-tight">
+              {currentSemester.semester} Semester &mdash; S.Y. {currentSemester.schoolYear}
+            </p>
+          </div>
+          <span className="ml-auto inline-flex items-center px-2.5 py-1 rounded-full text-xs font-semibold bg-indigo-100 text-indigo-700 border border-indigo-200">
+            Active
+          </span>
+        </div>
+      )}
+
+      {!currentSemester && !loading && (
+        <div className="flex items-center gap-3 px-5 py-4 rounded-xl border border-amber-200 bg-amber-50">
+          <AlertCircle className="h-5 w-5 text-amber-500 shrink-0" />
+          <p className="text-sm text-amber-700">
+            No semester has been set yet. Use <span className="font-semibold">Start New Semester</span> to configure the current academic term.
+          </p>
+        </div>
+      )}
       {/* Status Message */}
       {message && (
         <div
