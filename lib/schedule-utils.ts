@@ -54,7 +54,6 @@ export async function assignClaimSchedule(): Promise<AssignResult | AssignError>
     .doc("stickerClaiming")
     .get()
 
-  // No document at all, or both fields are empty/missing
   if (!settingsSnap.exists) {
     return { success: false, error: { reason: "not_set" } }
   }
@@ -63,9 +62,7 @@ export async function assignClaimSchedule(): Promise<AssignResult | AssignError>
   const rawStart = settings.startDate
   const rawEnd = settings.endDate
 
-  // Treat empty string, null, undefined as "not set"
-  const isEmpty = (v: any) =>
-    v === null || v === undefined || v === ""
+  const isEmpty = (v: any) => v === null || v === undefined || v === ""
 
   if (isEmpty(rawStart) || isEmpty(rawEnd)) {
     return { success: false, error: { reason: "not_set" } }
@@ -96,14 +93,23 @@ export async function assignClaimSchedule(): Promise<AssignResult | AssignError>
     }
   }
 
-  // Find next available slot
-  const cursor = new Date(startDate)
+  // Start from whichever is later: the configured startDate or today.
+  // No point iterating days that have already fully passed.
+  const todayMidnight = new Date(now)
+  todayMidnight.setHours(0, 0, 0, 0)
+  const cursor = new Date(Math.max(startDate.getTime(), todayMidnight.getTime()))
 
   while (cursor <= endDate) {
     if (isValidDay(cursor)) {
       const dateKey = toDateKey(cursor)
 
+      // For today specifically, skip any time slot whose end hour has already passed.
+      // e.g. if it's 2PM, the 8AM–11AM slot is gone — skip it and only offer 1PM–4PM or 5PM–7PM.
+      const isToday = dateKey === toDateKey(now)
+
       for (let slotIndex = 0; slotIndex < TIME_SLOTS.length; slotIndex++) {
+        if (isToday && now.getHours() >= TIME_SLOTS[slotIndex].endHour) continue
+
         const slotKey = `${dateKey}_slot${slotIndex}`
         const slotRef = adminDB.collection("sticker_claim_slots").doc(slotKey)
 
@@ -152,7 +158,7 @@ export async function assignClaimSchedule(): Promise<AssignResult | AssignError>
     cursor.setDate(cursor.getDate() + 1)
   }
 
-  // All slots within the period are full — treat as expired/full
+  // All slots within the period are full
   return {
     success: false,
     error: {

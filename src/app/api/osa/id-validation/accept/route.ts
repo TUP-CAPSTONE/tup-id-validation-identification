@@ -192,12 +192,7 @@ export async function POST(req: Request) {
       },
     })
 
-    const studentProfileRef = adminDB.collection("student_profiles").doc(studentId)
-    batch.update(studentProfileRef, {
-      isValidated: true,
-      lastValidatedAt: now,
-      lastValidatedBy: adminName,
-    })
+    // ✅ isValidated is NOT set here — only set after QR scan confirmation
 
     const validationRules = [
       "Save or print this email containing your QR code",

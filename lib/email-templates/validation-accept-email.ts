@@ -15,19 +15,19 @@ export function buildValidationEmailHTML(params: ValidationEmailParams): string 
   return `
     <div style="margin:0;padding:0;background:#f1f5f9;font-family:Arial,Helvetica,sans-serif;">
       <div style="max-width:680px;margin:0 auto;padding:32px 20px;">
-        
+
         <!-- Header Card -->
         <div style="background:linear-gradient(135deg,#0ea5e9,#0284c7);border-radius:20px;padding:28px 24px;color:#fff;box-shadow:0 12px 35px rgba(14,165,233,0.3);">
           <div style="font-size:15px;opacity:.92;letter-spacing:.5px;text-transform:uppercase;">TUP SIIVS</div>
           <div style="font-size:28px;font-weight:900;margin-top:8px;">ID Validation Approved ✓</div>
           <div style="font-size:15px;opacity:.94;margin-top:10px;line-height:1.6;">
-            Your ID validation request has been accepted. Follow the steps below to complete the process.
+            Your ID validation request has been accepted. Please read this email carefully for your claiming schedule and instructions.
           </div>
         </div>
 
         <!-- Main Content Card -->
         <div style="background:#ffffff;border-radius:20px;margin-top:18px;padding:28px;border:1.5px solid #e2e8f0;box-shadow:0 4px 12px rgba(0,0,0,0.04);">
-          
+
           <div style="font-size:17px;color:#0f172a;font-weight:700;margin-bottom:12px;">
             Hello ${studentName},
           </div>
@@ -40,7 +40,7 @@ export function buildValidationEmailHTML(params: ValidationEmailParams): string 
           <!-- Sticker Claiming Schedule -->
           <div style="margin-top:24px;background:linear-gradient(135deg,#f0fdf4,#dcfce7);border:2px solid #86efac;border-radius:16px;padding:22px;text-align:center;">
             <div style="font-size:15px;color:#15803d;font-weight:800;margin-bottom:14px;">
-              🗓️ Your Sticker Claiming Schedule
+              🗓️ Your Assigned Sticker Claiming Schedule
             </div>
             <div style="display:inline-block;background:#ffffff;border-radius:12px;padding:16px 28px;box-shadow:0 2px 8px rgba(0,0,0,0.07);">
               <div style="font-size:18px;font-weight:900;color:#166534;margin-bottom:6px;">
@@ -50,8 +50,22 @@ export function buildValidationEmailHTML(params: ValidationEmailParams): string 
                 ⏰ ${claimSchedule.timeSlotLabel}
               </div>
             </div>
-            <div style="margin-top:14px;font-size:12px;color:#166534;line-height:1.6;">
-              Please report to the <b>Office of Student Affairs (OSA)</b> on the date and time above to claim your ID sticker.
+          </div>
+
+          <!-- Reassurance Notice -->
+          <div style="margin-top:16px;background:#eff6ff;border:1.5px solid #bfdbfe;border-radius:12px;padding:18px;">
+            <div style="font-size:13px;font-weight:800;color:#1e40af;margin-bottom:8px;">
+              📌 Don't worry — you have until your QR code expires!
+            </div>
+            <div style="font-size:13px;color:#1e3a8a;line-height:1.8;">
+              Your QR code is valid for <b>2 days</b> from the time this email was sent (expires on <b>${expirationDate}</b>).
+              This means you do <b>not</b> need to visit the OSA specifically on <b>${claimSchedule.dateLabel}</b> only —
+              you may visit on <b>any day within your QR code's validity period</b>, as long as you arrive during your assigned
+              time slot of <b>${claimSchedule.timeSlotLabel}</b>.
+            </div>
+            <div style="margin-top:10px;font-size:12px;color:#1d4ed8;font-weight:600;">
+              Example: If your schedule says Monday, 8:00 AM – 11:00 AM and your QR expires on Wednesday,
+              you may visit on Monday, Tuesday, or Wednesday — but always between 8:00 AM and 11:00 AM.
             </div>
           </div>
           ` : ''}
@@ -61,9 +75,9 @@ export function buildValidationEmailHTML(params: ValidationEmailParams): string 
             <div style="font-size:15px;color:#0f172a;font-weight:700;margin-bottom:14px;">
               📱 Your Validation QR Code
             </div>
-            <img 
-              src="cid:qrcode@validation" 
-              alt="Validation QR Code" 
+            <img
+              src="cid:qrcode@validation"
+              alt="Validation QR Code"
               width="280"
               style="
                 display:block;
@@ -75,7 +89,7 @@ export function buildValidationEmailHTML(params: ValidationEmailParams): string 
                 padding:12px;
                 box-shadow:0 4px 10px rgba(0,0,0,0.08);
                 margin:0 auto;
-              " 
+              "
             />
             <div style="margin-top:16px;font-size:13px;color:#64748b;line-height:1.6;">
               <b>Student ID:</b> ${studentId}
@@ -86,7 +100,7 @@ export function buildValidationEmailHTML(params: ValidationEmailParams): string 
           </div>
 
           <!-- Validation Steps -->
-          <div style="margin-top:26px;border-left:4px solid #0ea5e9;padding-left:18px;background:#f0f9ff;padding:18px;border-radius:12px;">
+          <div style="margin-top:26px;background:#f0f9ff;padding:18px;border-left:4px solid #0ea5e9;border-radius:12px;">
             <div style="font-size:14px;color:#0f172a;font-weight:700;margin-bottom:12px;">
               📋 Steps to Complete Your Validation:
             </div>
@@ -104,7 +118,8 @@ export function buildValidationEmailHTML(params: ValidationEmailParams): string 
               <li>Do not share this QR code with anyone</li>
               <li>The QR code can only be used once and expires in 2 days</li>
               <li>Bring your original ID and COR to the OSA</li>
-              ${claimSchedule ? `<li>You <b>must</b> arrive within your assigned time slot: <b>${claimSchedule.timeSlotLabel}</b></li>` : ''}
+              ${claimSchedule ? `<li>You must arrive during your assigned time slot: <b>${claimSchedule.timeSlotLabel}</b></li>` : ''}
+              <li>If you are unable to visit within your QR code's validity, please contact the OSA for assistance</li>
             </ul>
           </div>
 
