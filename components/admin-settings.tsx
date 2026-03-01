@@ -1330,7 +1330,7 @@ export function AdminSettings() {
             type: "warning",
             bullets: [
               "Every student profile's validation status will be set to 'not validated'",
-              "All validatedAt and validatedBy fields will be cleared",
+              "All students' date of validation and validated them will be cleared",
               "Both the ID validation period and sticker claiming period will be wiped",
               "Students will be unable to claim stickers until new periods are configured",
               "This operation is logged for audit purposes",
