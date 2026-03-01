@@ -7,10 +7,8 @@ const db = getFirestore(app);
 
 export async function GET(request: NextRequest) {
   try {
-    // Get the client's IP address for rate limiting
     const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "anonymous";
 
-    // Check rate limit - 50 requests per minute for student list fetching
     const rateLimit = await checkRateLimit(
       rateLimiters.studentProfile,
       `student-list:${ip}`
@@ -18,28 +16,21 @@ export async function GET(request: NextRequest) {
 
     if (!rateLimit.success) {
       return NextResponse.json(
-        {
-          error: "Too many requests. Please try again later.",
-          resetAt: rateLimit.reset,
-        },
-        {
-          status: 429,
-          headers: createRateLimitHeaders(rateLimit),
-        }
+        { error: "Too many requests. Please try again later.", resetAt: rateLimit.reset },
+        { status: 429, headers: createRateLimitHeaders(rateLimit) }
       );
     }
 
-    // Get query parameters
     const searchParams = request.nextUrl.searchParams;
     const pageSize = parseInt(searchParams.get("pageSize") || "20");
-    const lastStudentNumber = searchParams.get("lastStudentNumber");
+    // lastDocId is the Firebase Auth UID — the actual Firestore doc ID of student_profiles
+    const lastDocId = searchParams.get("lastStudentNumber");
     const searchQuery = searchParams.get("search") || "";
     const collegeFilter = searchParams.get("college") || "";
     const courseFilter = searchParams.get("course") || "";
     const sectionFilter = searchParams.get("section") || "";
     const statusFilter = searchParams.get("status") || "";
 
-    // Validate page size
     if (pageSize > 100 || pageSize < 1) {
       return NextResponse.json(
         { error: "Page size must be between 1 and 100" },
@@ -47,15 +38,14 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Build the query - fetch larger dataset when filters are active
     const effectivePageSize = (collegeFilter || statusFilter) ? 100 : pageSize;
     let studentsQuery;
-    
-    if (lastStudentNumber) {
-      // Get the last document for pagination
-      const lastDocRef = doc(db, "student_profiles", lastStudentNumber);
+
+    if (lastDocId) {
+      // Cursor uses the UID (doc ID), not the studentNumber field
+      const lastDocRef = doc(db, "student_profiles", lastDocId);
       const lastDocSnap = await getDoc(lastDocRef);
-      
+
       if (!lastDocSnap.exists()) {
         return NextResponse.json(
           { error: "Invalid pagination cursor" },
@@ -77,14 +67,10 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Execute the query
     const studentsSnapshot = await getDocs(studentsQuery);
 
-    // Get all student UIDs to check for pending validation requests
-    const studentUids = studentsSnapshot.docs.map(doc => doc.data().uid);
+    const studentUids = studentsSnapshot.docs.map(d => d.data().uid).filter(Boolean);
 
-    // Fetch pending validation requests for these students
-    // Split into chunks of 30 due to Firestore IN query limit
     let pendingRequests: { [key: string]: boolean } = {};
     if (studentUids.length > 0) {
       const chunkSize = 30;
@@ -96,19 +82,15 @@ export async function GET(request: NextRequest) {
           where("status", "==", "pending")
         );
         const pendingSnapshot = await getDocs(pendingQuery);
-        
-        pendingSnapshot.docs.forEach(doc => {
-          const data = doc.data();
-          pendingRequests[data.studentId] = true;
+        pendingSnapshot.docs.forEach(d => {
+          pendingRequests[d.data().studentId] = true;
         });
       }
     }
 
-    // Map the students data
-    const allStudents = studentsSnapshot.docs.map(doc => {
-      const data = doc.data();
-      
-      // Determine status - check validation status correctly
+    const allStudents = studentsSnapshot.docs.map(d => {
+      const data = d.data();
+
       let status: "Validated" | "Not Validated" | "Request Pending";
       if (pendingRequests[data.uid]) {
         status = "Request Pending";
@@ -125,109 +107,76 @@ export async function GET(request: NextRequest) {
         course: data.course || "N/A",
         section: data.section || "N/A",
         status,
-        validatedAt: data.validatedAt?.toDate().toISOString() || null,
+        validatedAt: data.validatedAt?.toDate?.().toISOString() || null,
         email: data.email,
-        docId: doc.id,
+        uid: d.id,   // doc ID = Firebase Auth UID — used for history subcollection path
+        docId: d.id, // kept separately for pagination cursor (stripped before response)
       };
     });
 
-    // Apply filters in priority order: College -> Status -> Course -> Section
     let filteredStudents = allStudents;
 
-    // Priority 1: Apply college filter
     if (collegeFilter) {
-      filteredStudents = filteredStudents.filter(student => 
-        student.college.toLowerCase() === collegeFilter.toLowerCase()
+      filteredStudents = filteredStudents.filter(s =>
+        s.college.toLowerCase() === collegeFilter.toLowerCase()
       );
     }
 
-    // Priority 2: Apply status filter (exclude Request Pending by default)
     if (statusFilter) {
-      filteredStudents = filteredStudents.filter(student => student.status === statusFilter);
-    } else {
-      // By default, exclude "Request Pending" status
-      filteredStudents = filteredStudents.filter(student => student.status !== "Request Pending");
+      filteredStudents = filteredStudents.filter(s => s.status === statusFilter);
     }
+    // No default exclusion — show all students including "Request Pending"
 
-    // Priority 3: Apply course filter
     if (courseFilter) {
-      filteredStudents = filteredStudents.filter(student => 
-        student.course.toLowerCase() === courseFilter.toLowerCase()
+      filteredStudents = filteredStudents.filter(s =>
+        s.course.toLowerCase() === courseFilter.toLowerCase()
       );
     }
 
-    // Priority 4: Apply section filter
     if (sectionFilter) {
-      filteredStudents = filteredStudents.filter(student => 
-        student.section.toLowerCase() === sectionFilter.toLowerCase()
+      filteredStudents = filteredStudents.filter(s =>
+        s.section.toLowerCase() === sectionFilter.toLowerCase()
       );
     }
 
-    // Priority 5: Apply search filter if provided
     if (searchQuery) {
       const lowerSearch = searchQuery.toLowerCase().trim();
-      filteredStudents = filteredStudents.filter(
-        student =>
-          student.fullName.toLowerCase().includes(lowerSearch) ||
-          student.studentNumber.toLowerCase().includes(lowerSearch) ||
-          student.email.toLowerCase().includes(lowerSearch)
+      filteredStudents = filteredStudents.filter(s =>
+        s.fullName?.toLowerCase().includes(lowerSearch) ||
+        s.studentNumber?.toLowerCase().includes(lowerSearch) ||
+        s.email?.toLowerCase().includes(lowerSearch)
       );
     }
 
-    // Collect available values for dropdowns based on ALL students fetched (before pagination)
-    const baseForDropdowns = allStudents;
-    
-    // Get all valid colleges from base data
     const allColleges = [...new Set(
-      baseForDropdowns
-        .map(s => s.college)
-        .filter(c => c !== "N/A")
-        .sort()
+      allStudents.map(s => s.college).filter(c => c !== "N/A").sort()
     )];
 
-    // Get courses based on selected college or all courses if no college selected
     let allCourses: string[] = [];
     if (collegeFilter) {
       allCourses = [...new Set(
-        baseForDropdowns
+        allStudents
           .filter(s => s.college.toLowerCase() === collegeFilter.toLowerCase())
-          .map(s => s.course)
-          .filter(c => c !== "N/A")
-          .sort()
+          .map(s => s.course).filter(c => c !== "N/A").sort()
       )];
     } else {
-      // Show all courses if no college filter
       allCourses = [...new Set(
-        baseForDropdowns
-          .map(s => s.course)
-          .filter(c => c !== "N/A")
-          .sort()
+        allStudents.map(s => s.course).filter(c => c !== "N/A").sort()
       )];
     }
 
-    // Get all sections
     const allSections = [...new Set(
-      baseForDropdowns
-        .map(s => s.section)
-        .filter(s => s !== "N/A")
-        .sort()
+      allStudents.map(s => s.section).filter(s => s !== "N/A").sort()
     )];
 
-    // Paginate the filtered results
     const paginatedStudents = filteredStudents.slice(0, pageSize);
-    
-    // Remove docId from response (it's only for internal use)
     const studentsToReturn = paginatedStudents.map(({ docId, ...rest }) => rest);
 
-    // Determine if there are more results
-    // hasMore is true if we have more filtered results than current page,
-    // or if we fetched a full batch AND have enough for a full page
-    const hasMore = filteredStudents.length > pageSize || 
-                    (allStudents.length === effectivePageSize && filteredStudents.length >= pageSize);
-    
-    // Get the document ID of the last filtered student for next page cursor
-    const lastFilteredStudent = paginatedStudents[paginatedStudents.length - 1];
-    const nextCursor = lastFilteredStudent ? lastFilteredStudent.docId : null;
+    const hasMore =
+      filteredStudents.length > pageSize ||
+      (allStudents.length === effectivePageSize && filteredStudents.length >= pageSize);
+
+    const nextCursor = paginatedStudents[paginatedStudents.length - 1]?.docId ?? null;
 
     return NextResponse.json(
       {
@@ -239,16 +188,10 @@ export async function GET(request: NextRequest) {
         availableCourses: allCourses,
         availableSections: allSections,
       },
-      {
-        status: 200,
-        headers: createRateLimitHeaders(rateLimit),
-      }
+      { status: 200, headers: createRateLimitHeaders(rateLimit) }
     );
   } catch (error) {
     console.error("Error fetching students:", error);
-    return NextResponse.json(
-      { error: "Internal server error" },
-      { status: 500 }
-    );
+    return NextResponse.json({ error: "Internal server error" }, { status: 500 });
   }
 }
