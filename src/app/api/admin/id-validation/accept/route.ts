@@ -45,12 +45,7 @@ export async function POST(req: Request) {
       adminName = adminUser.displayName || adminUser.email || "Admin"
 
       const adminDoc = await adminDB.collection("users").doc(adminUserId).get()
-      if (!adminDoc.exists) {
-        return NextResponse.json({ error: "Admin access required" }, { status: 403 })
-      }
-
-      const adminRole = adminDoc.data()?.role
-      if (adminRole !== "admin") {
+      if (!adminDoc.exists || adminDoc.data()?.role !== "admin") {
         return NextResponse.json({ error: "Admin access required" }, { status: 403 })
       }
 
@@ -132,24 +127,6 @@ export async function POST(req: Request) {
       )
     }
 
-    // 🎓 Fetch current semester from settings
-    const semesterSnap = await adminDB
-      .collection("system_settings")
-      .doc("currentSemester")
-      .get()
-
-    if (!semesterSnap.exists) {
-      console.error("❌ Current semester not set in system_settings/currentSemester")
-      return NextResponse.json(
-        { error: "Current semester is not configured. Please set the semester first." },
-        { status: 400 }
-      )
-    }
-
-    const semesterData = semesterSnap.data()!
-    const currentSemester: string = semesterData.semester
-    const currentSchoolYear: string = semesterData.schoolYear
-
     // 🎫 Generate QR Code
     const qrToken = generateQRToken()
     const qrData = createQRData(studentId, qrToken)
@@ -178,12 +155,7 @@ export async function POST(req: Request) {
       expiresAt: expirationDate,
       isUsed: false,
       createdAt: now,
-      studentInfo: {
-        tupId,
-        name: studentName,
-        course,
-        section,
-      },
+      studentInfo: { tupId, name: studentName, course, section },
     })
 
     // Update validation request
@@ -214,30 +186,12 @@ export async function POST(req: Request) {
       timestamp: FieldValue.serverTimestamp(),
     })
 
-    // ✅ Write validation history entry to student_profiles subcollection
-    // studentId here is the Firebase Auth UID (field name in validation_requests2)
-    const validationHistoryRef = adminDB
-      .collection("student_profiles")
-      .doc(studentId)
-      .collection("validation_history")
-      .doc()
-
-    batch.set(validationHistoryRef, {
-      semester: currentSemester,
-      schoolYear: currentSchoolYear,
-      status: "validated",
-      date: now,
-      validatedBy: adminName,
-    })
-
-    // Also update isValidated flag on the student profile
+    // ✅ Update isValidated on student profile
     const studentProfileRef = adminDB.collection("student_profiles").doc(studentId)
     batch.update(studentProfileRef, {
       isValidated: true,
       lastValidatedAt: now,
       lastValidatedBy: adminName,
-      lastValidatedSemester: currentSemester,
-      lastValidatedSchoolYear: currentSchoolYear,
     })
 
     // 📩 Queue email
@@ -284,14 +238,10 @@ export async function POST(req: Request) {
     })
 
     await batch.commit()
-    console.log("✅ [ADMIN] Batch write successful, validation history saved")
+    console.log("✅ [ADMIN] Batch write successful")
 
     return NextResponse.json(
-      {
-        success: true,
-        qrCodeId: qrCodeRef.id,
-        expiresAt: expirationDate.toISOString(),
-      },
+      { success: true, qrCodeId: qrCodeRef.id, expiresAt: expirationDate.toISOString() },
       { headers: createRateLimitHeaders(rateLimitResult) }
     )
   } catch (error: any) {

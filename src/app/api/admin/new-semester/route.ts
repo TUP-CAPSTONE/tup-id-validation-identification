@@ -7,16 +7,18 @@ import { cookies } from "next/headers"
  *
  * Starts a new semester by:
  * 1. Checking for duplicate school year + semester combo (returns 409 if found)
- * 2. Resetting all student isValidated fields to false
- *    → Also writes a "not_validated" history entry for any student who was NOT
- *      validated in the PREVIOUS semester (stored in system_settings/currentSemester)
- * 3. Clearing the current validation period and sticker claiming period
- * 4. Saving the new semester info to system_settings/currentSemester
- * 5. Appending to the semester history log
+ * 2. Reading each student's current isValidated field and writing a validation
+ *    history entry for the semester that is NOW ENDING:
+ *      - isValidated === true  → "validated"
+ *      - isValidated === false → "not_validated"
+ * 3. Resetting all student isValidated fields to false for the new semester
+ * 4. Clearing the current validation period and sticker claiming period
+ * 5. Saving the new semester info to system_settings/currentSemester
+ * 6. Appending to the semester history log
  */
 export async function POST(req: NextRequest) {
   try {
-    // ── Auth ────────────────────────────────────────────────────────────────
+    // ── Auth ─────────────────────────────────────────────────────────────────
     const cookieStore = await cookies()
     const sessionCookie = cookieStore.get("admin_session")?.value
 
@@ -43,7 +45,7 @@ export async function POST(req: NextRequest) {
       return NextResponse.json({ error: "Forbidden" }, { status: 403 })
     }
 
-    // ── Parse & validate body ────────────────────────────────────────────────
+    // ── Parse & validate body ─────────────────────────────────────────────────
     const { schoolYear, semester } = await req.json()
 
     if (!schoolYear || !semester) {
@@ -76,11 +78,8 @@ export async function POST(req: NextRequest) {
       )
     }
 
-    // ── Duplicate detection ──────────────────────────────────────────────────
-    const semesterLogRef = adminDB
-      .collection("system_settings")
-      .doc("semesterLog")
-
+    // ── Duplicate detection ───────────────────────────────────────────────────
+    const semesterLogRef = adminDB.collection("system_settings").doc("semesterLog")
     const currentLog = await semesterLogRef.get()
     const history: Array<{ schoolYear: string; semester: string }> =
       currentLog.exists ? currentLog.data()?.history ?? [] : []
@@ -100,14 +99,12 @@ export async function POST(req: NextRequest) {
 
     console.log(`Starting new semester: ${semester} semester, ${schoolYear}`)
 
-    // ── Step 1: Snapshot previous periods for logging ────────────────────────
+    // ── Step 1: Snapshot previous periods for logging ─────────────────────────
     const validationDoc = await adminDB
       .collection("system_settings")
       .doc("idValidation")
       .get()
-    const previousValidationPeriod = validationDoc.exists
-      ? validationDoc.data()
-      : null
+    const previousValidationPeriod = validationDoc.exists ? validationDoc.data() : null
 
     const stickerDoc = await adminDB
       .collection("system_settings")
@@ -115,9 +112,7 @@ export async function POST(req: NextRequest) {
       .get()
     const previousStickerPeriod = stickerDoc.exists ? stickerDoc.data() : null
 
-    // ── Read previous semester before overwriting ────────────────────────────
-    // This is used to write "not_validated" history for students who were
-    // not validated during the semester that is now ending.
+    // ── Read the semester that is NOW ENDING ──────────────────────────────────
     const prevSemesterSnap = await adminDB
       .collection("system_settings")
       .doc("currentSemester")
@@ -132,97 +127,80 @@ export async function POST(req: NextRequest) {
 
     const hasPreviousSemester = !!(prevSemester && prevSchoolYear)
 
-    // ── Step 2: Reset all student validation statuses ────────────────────────
-    // Also writes "not_validated" history for students who weren't validated
-    // in the previous semester.
+    // ── Step 2: Process all students ──────────────────────────────────────────
     const studentsSnapshot = await adminDB.collection("student_profiles").get()
 
-    let resetCount = 0
-    let notValidatedCount = 0
     const now = new Date()
+    let resetCount = 0
+    let validatedCount = 0
+    let notValidatedCount = 0
 
-    const BATCH_LIMIT = 400 // conservative to leave room for history doc writes
+    const BATCH_LIMIT = 400
     let batch = adminDB.batch()
-    let operationCount = 0
+    let opsInBatch = 0
 
-    const flushBatch = async () => {
-      if (operationCount > 0) {
+    const flushIfNeeded = async () => {
+      if (opsInBatch >= BATCH_LIMIT) {
         await batch.commit()
-        console.log(`Committed batch of ${operationCount} operations`)
+        console.log(`Committed batch of ${opsInBatch} operations`)
         batch = adminDB.batch()
-        operationCount = 0
+        opsInBatch = 0
       }
     }
 
-    for (const doc of studentsSnapshot.docs) {
-      const uid = doc.id
+    for (const studentDoc of studentsSnapshot.docs) {
+      const uid = studentDoc.id
+      const studentData = studentDoc.data()
 
-      // Reset the student profile
-      batch.update(doc.ref, {
+      // a) Write validation history entry based on current isValidated value
+      //    Only write if there was actually a previous semester to record
+      if (hasPreviousSemester) {
+        const wasValidated = studentData.isValidated === true
+
+        const historyRef = adminDB
+          .collection("student_profiles")
+          .doc(uid)
+          .collection("validation_history")
+          .doc()
+
+        batch.set(historyRef, {
+          semester: prevSemester,
+          schoolYear: prevSchoolYear,
+          status: wasValidated ? "validated" : "not_validated",
+          date: now,
+          validatedBy: wasValidated ? (studentData.lastValidatedBy ?? null) : null,
+        })
+
+        opsInBatch++
+        wasValidated ? validatedCount++ : notValidatedCount++
+
+        await flushIfNeeded()
+      }
+
+      // b) Reset isValidated to false for the incoming semester
+      batch.update(studentDoc.ref, {
         isValidated: false,
         validatedAt: null,
         validatedBy: null,
         validationResetAt: now.toISOString(),
         validationResetBy: "new_semester",
       })
-      operationCount++
+
+      opsInBatch++
       resetCount++
 
-      // Check if this student was validated in the previous semester
-      if (hasPreviousSemester) {
-        // Flush batch before doing a read if we're near the limit
-        if (operationCount >= BATCH_LIMIT) {
-          await flushBatch()
-        }
-
-        const validatedHistorySnap = await adminDB
-          .collection("student_profiles")
-          .doc(uid)
-          .collection("validation_history")
-          .where("semester", "==", prevSemester)
-          .where("schoolYear", "==", prevSchoolYear)
-          .where("status", "==", "validated")
-          .limit(1)
-          .get()
-
-        const wasValidated = !validatedHistorySnap.empty
-
-        if (!wasValidated) {
-          // Write a "not_validated" entry for the semester that just ended
-          const historyRef = adminDB
-            .collection("student_profiles")
-            .doc(uid)
-            .collection("validation_history")
-            .doc()
-
-          batch.set(historyRef, {
-            semester: prevSemester,
-            schoolYear: prevSchoolYear,
-            status: "not_validated",
-            // Date records when the new semester was started (closing date for prev)
-            date: now,
-            validatedBy: null,
-          })
-
-          operationCount++
-          notValidatedCount++
-        }
-      }
-
-      if (operationCount >= BATCH_LIMIT) {
-        await flushBatch()
-      }
+      await flushIfNeeded()
     }
 
-    // Flush any remaining student ops before proceeding
-    await flushBatch()
+    if (opsInBatch > 0) {
+      await batch.commit()
+      console.log(`Committed final batch of ${opsInBatch} operations`)
+    }
 
     console.log(`Reset ${resetCount} student profiles`)
-    console.log(
-      `Wrote ${notValidatedCount} "not_validated" history entries for ${prevSemester} ${prevSchoolYear}`
-    )
+    console.log(`History — validated: ${validatedCount}, not_validated: ${notValidatedCount}`)
 
-    // ── Step 3: Clear validation period ─────────────────────────────────────
+    // ── Step 3: Clear validation period ──────────────────────────────────────
     await adminDB
       .collection("system_settings")
       .doc("idValidation")
@@ -237,7 +215,7 @@ export async function POST(req: NextRequest) {
         { merge: true }
       )
 
-    // ── Step 4: Clear sticker claiming period ────────────────────────────────
+    // ── Step 4: Clear sticker claiming period ─────────────────────────────────
     await adminDB
       .collection("system_settings")
       .doc("stickerClaiming")
@@ -252,7 +230,7 @@ export async function POST(req: NextRequest) {
         { merge: true }
       )
 
-    // ── Step 5: Save new current semester ────────────────────────────────────
+    // ── Step 5: Save new current semester ─────────────────────────────────────
     await adminDB
       .collection("system_settings")
       .doc("currentSemester")
@@ -263,7 +241,7 @@ export async function POST(req: NextRequest) {
         startedBy: decodedToken.uid,
       })
 
-    // ── Step 6: Append to semester history log ───────────────────────────────
+    // ── Step 6: Append to semester history log ────────────────────────────────
     await semesterLogRef.set({
       lastSemesterReset: now.toISOString(),
       lastResetBy: decodedToken.uid,
@@ -275,6 +253,7 @@ export async function POST(req: NextRequest) {
           semester,
           timestamp: now.toISOString(),
           resetCount,
+          validatedCount,
           notValidatedCount,
           performedBy: decodedToken.uid,
           previousValidationPeriod,
@@ -288,10 +267,11 @@ export async function POST(req: NextRequest) {
     return NextResponse.json({
       success: true,
       resetCount,
+      validatedCount,
       notValidatedCount,
       schoolYear,
       semester,
-      message: `Successfully started ${semester} semester of ${schoolYear}. ${resetCount} student profiles reset. ${notValidatedCount} student(s) marked as not validated for ${prevSemester} ${prevSchoolYear}.`,
+      message: `Successfully started ${semester} semester of ${schoolYear}. ${resetCount} student profiles reset. History written: ${validatedCount} validated, ${notValidatedCount} not validated for ${prevSemester ?? "—"} ${prevSchoolYear ?? "—"}.`,
     })
   } catch (error) {
     console.error("Error starting new semester:", error)

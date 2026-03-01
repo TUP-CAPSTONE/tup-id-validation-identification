@@ -7,7 +7,7 @@ export async function POST(request: NextRequest) {
   try {
     console.log("=== Starting validation request submission ===");
 
-    // Auth
+    // ── Auth ─────────────────────────────────────────────────────────────────
     const authHeader = request.headers.get("authorization");
 
     if (!authHeader || !authHeader.startsWith("Bearer ")) {
@@ -33,7 +33,7 @@ export async function POST(request: NextRequest) {
     const uid = decodedToken.uid;
     console.log(`✓ Authenticated user: ${uid}`);
 
-    // Rate limiting
+    // ── Rate limiting ─────────────────────────────────────────────────────────
     const rateLimitResult = await checkRateLimit(
       rateLimiters.studentValidationSubmit,
       uid
@@ -43,8 +43,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json(
         {
           success: false,
-          error:
-            "Rate limit exceeded. You can only submit 3 requests per hour. Please try again later.",
+          error: "Rate limit exceeded. You can only submit 3 requests per hour. Please try again later.",
           limit: rateLimitResult.limit,
           remaining: rateLimitResult.remaining,
           reset: rateLimitResult.reset,
@@ -56,6 +55,41 @@ export async function POST(request: NextRequest) {
       );
     }
 
+    // ── Fetch current semester (required) ────────────────────────────────────
+    const semesterSnap = await adminDB
+      .collection("system_settings")
+      .doc("currentSemester")
+      .get();
+
+    if (!semesterSnap.exists) {
+      console.error("❌ No current semester set in system_settings/currentSemester");
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Validation requests are not open yet. No semester has been configured. Please contact the admin.",
+        },
+        { status: 400, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
+    const semesterData = semesterSnap.data()!;
+    const currentSemester: string = semesterData.semester;
+    const currentSchoolYear: string = semesterData.schoolYear;
+
+    if (!currentSemester || !currentSchoolYear) {
+      console.error("❌ Semester document exists but fields are missing:", semesterData);
+      return NextResponse.json(
+        {
+          success: false,
+          error: "Semester configuration is incomplete. Please contact the admin.",
+        },
+        { status: 400, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
+    console.log(`📅 Current semester: ${currentSemester} | ${currentSchoolYear}`);
+
+    // ── Parse body ────────────────────────────────────────────────────────────
     const body = await request.json();
     const {
       studentNumber,
@@ -73,16 +107,8 @@ export async function POST(request: NextRequest) {
       faceRightUrl,
     } = body;
 
-    // Validation
-    if (
-      !studentNumber ||
-      !studentName ||
-      !college ||
-      !email ||
-      !course ||
-      !section ||
-      !yearLevel
-    ) {
+    // ── Field validation ──────────────────────────────────────────────────────
+    if (!studentNumber || !studentName || !college || !email || !course || !section || !yearLevel) {
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
         { status: 400, headers: createRateLimitHeaders(rateLimitResult) }
@@ -99,8 +125,8 @@ export async function POST(request: NextRequest) {
     // Verify all URLs are valid Firebase Storage URLs
     const storageUrlPattern = /^https:\/\/firebasestorage\.googleapis\.com\//;
     const urls = [corUrl, idPhotoUrl, faceFrontUrl, faceLeftUrl, faceRightUrl];
-    
-    if (!urls.every(url => storageUrlPattern.test(url))) {
+
+    if (!urls.every((url) => storageUrlPattern.test(url))) {
       return NextResponse.json(
         { success: false, error: "Invalid storage URLs provided" },
         { status: 400, headers: createRateLimitHeaders(rateLimitResult) }
@@ -116,7 +142,7 @@ export async function POST(request: NextRequest) {
       yearLevel,
     });
 
-    // Check if already accepted
+    // ── Check if already accepted ─────────────────────────────────────────────
     const validationRequestsRef = adminDB.collection("validation_requests2");
     const existingQuery = await validationRequestsRef
       .where("studentId", "==", uid)
@@ -130,18 +156,15 @@ export async function POST(request: NextRequest) {
         return NextResponse.json(
           {
             success: false,
-            error:
-              "You have already been validated. You cannot submit another request.",
+            error: "You have already been validated. You cannot submit another request.",
           },
           { status: 400, headers: createRateLimitHeaders(rateLimitResult) }
         );
       }
-      console.log(
-        `ℹ️ Found existing request for ${studentNumber} with status: ${existingRequest.status}`
-      );
+      console.log(`ℹ️ Found existing request for ${studentNumber} with status: ${existingRequest.status}`);
     }
 
-    // Save request data
+    // ── Save request ──────────────────────────────────────────────────────────
     const requestData = {
       studentId: uid,
       tupId: studentNumber,
@@ -159,6 +182,9 @@ export async function POST(request: NextRequest) {
         left: faceLeftUrl,
         back: faceRightUrl,
       },
+      // 📅 Semester snapshot at time of request
+      semester: currentSemester,
+      schoolYear: currentSchoolYear,
       status: "pending",
       requestTime: FieldValue.serverTimestamp(),
       rejectRemarks: null,
@@ -189,8 +215,7 @@ export async function POST(request: NextRequest) {
       {
         success: false,
         error: error.message || "Internal server error",
-        details:
-          process.env.NODE_ENV === "development" ? error.stack : undefined,
+        details: process.env.NODE_ENV === "development" ? error.stack : undefined,
       },
       { status: 500 }
     );
