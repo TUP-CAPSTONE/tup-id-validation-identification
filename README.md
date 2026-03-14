@@ -6,6 +6,7 @@ This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-
 
 ```bash
 npm install
+npm install @mediapipe/tasks-vision
 ```
 
 ### 2. Set Up Environment Variables
