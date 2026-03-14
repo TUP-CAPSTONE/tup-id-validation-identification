@@ -1,6 +1,7 @@
 "use client";
 
 import { useState, useEffect, useRef } from "react";
+import { FaceDetector, FilesetResolver } from "@mediapipe/tasks-vision";
 import { auth, db } from "@/lib/firebaseConfig";
 import { GoogleAuthProvider, signInWithPopup } from "firebase/auth";
 import { query, collection, where, getDocs } from "firebase/firestore";
@@ -21,6 +22,8 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { FacePhotoCapture, FacePhotos } from "@/components/face-photo-capture";
+
+const BLUR_THRESHOLD = 50;
 
 export function StudentRegistrationForm({
   className,
@@ -106,6 +109,131 @@ export function StudentRegistrationForm({
     up: null,
     down: null,
   });
+
+  // States for face detection and validation
+  const [faceDetector, setFaceDetector] = useState<FaceDetector | null>(null);
+  const [photoValidationError, setPhotoValidationError] = useState<string | null>(null);
+  const [validatingPhotoKey, setValidatingPhotoKey] = useState<keyof FacePhotos | null>(null);
+
+  //Initialize the MediaPipe Face Detector when the component mounts
+  useEffect(() => {
+  const createFaceDetector = async () => {
+    try {
+      const vision = await FilesetResolver.forVisionTasks(
+        "https://cdn.jsdelivr.net/npm/@mediapipe/tasks-vision@latest/wasm"
+      );
+      const detector = await FaceDetector.createFromOptions(vision, {
+        baseOptions: {
+          modelAssetPath: `https://storage.googleapis.com/mediapipe-models/face_detector/blaze_face_short_range/float16/1/blaze_face_short_range.tflite`,
+          delegate: "GPU",
+        },
+        runningMode: "IMAGE",
+      });
+      setFaceDetector(detector);
+    } catch (error) {
+      console.error("Error initializing face detector:", error);
+      setPhotoValidationError("Could not load face detection model. Please refresh the page.");
+      }
+    };
+    createFaceDetector();
+  }, []);
+
+    // Helper function to calculate image blur (Variance of Laplacian)
+  const calculateBlur = (imageData: ImageData): number => {
+    const { width, height, data } = imageData;
+    const grayscale = new Uint8ClampedArray(width * height);
+    // Convert to grayscale
+    for (let i = 0; i < data.length; i += 4) {
+      grayscale[i / 4] = 0.299 * data[i] + 0.587 * data[i + 1] + 0.114 * data[i + 2];
+    }
+    // Laplacian operator
+    let laplacianSum = 0;
+    let laplacianSqSum = 0;
+    let count = 0;
+    for (let y = 1; y < height - 1; y++) {
+      for (let x = 1; x < width - 1; x++) {
+        const p0 = grayscale[(y - 1) * width + x];
+        const p1 = grayscale[y * width + (x - 1)];
+        const p2 = grayscale[y * width + x];
+        const p3 = grayscale[y * width + (x + 1)];
+        const p4 = grayscale[(y + 1) * width + x];
+        const laplacian = p0 + p1 - 4 * p2 + p3 + p4;
+        laplacianSum += laplacian;
+        laplacianSqSum += laplacian * laplacian;
+        count++;
+      }
+    }
+    if (count === 0) return 0;
+    const mean = laplacianSum / count;
+    const variance = laplacianSqSum / count - mean * mean;
+    return variance;
+  };
+
+    // NEW: Main validation function for a single image
+  const validateImageQuality = async (dataUrl: string): Promise<void> => {
+    if (!faceDetector) {
+      throw new Error("Face detector is not ready.");
+    }
+
+    const image = new Image();
+    image.src = dataUrl;
+    await new Promise((resolve) => { image.onload = resolve; });
+
+    // 1. Blur Detection
+    const canvas = document.createElement('canvas');
+    canvas.width = image.width;
+    canvas.height = image.height;
+    const ctx = canvas.getContext('2d');
+    if (!ctx) throw new Error("Could not get canvas context");
+    
+    ctx.drawImage(image, 0, 0);
+    const imageData = ctx.getImageData(0, 0, canvas.width, canvas.height);
+    const blurVariance = calculateBlur(imageData);
+
+    console.log(`Blur Variance: ${blurVariance.toFixed(2)} (Threshold: ${BLUR_THRESHOLD})`);
+    if (blurVariance < BLUR_THRESHOLD) {
+      throw new Error(`Image is blurry (Score: ${blurVariance.toFixed(2)}). Please retake the photo.`);
+    }
+
+    // 2. Face Detection
+    const detections = faceDetector.detect(image).detections;
+    if (detections.length === 0) {
+      throw new Error("No face detected. Please retake the photo.");
+    }
+    if (detections.length > 1) {
+      throw new Error("Multiple faces detected. Only one person allowed.");
+    }
+  };
+
+  // Intercepts photo capture to perform validation before updating state
+  const handlePhotoCapture = async (newPhotos: FacePhotos) => {
+    // Find which photo was just added
+    const newKey = (Object.keys(newPhotos) as Array<keyof FacePhotos>).find(
+      (key) => newPhotos[key] && !facePhotos[key]
+    );
+
+    if (!newKey || !newPhotos[newKey]) {
+      // This can happen when a photo is cleared, which is a valid action.
+      setFacePhotos(newPhotos);
+      return;
+    }
+
+    const newDataUrl = newPhotos[newKey];
+    setValidatingPhotoKey(newKey);
+    setPhotoValidationError(null);
+    setError(""); // Clear main form error
+
+    try {
+      await validateImageQuality(newDataUrl);
+      // If validation is successful, update the state
+      setFacePhotos(newPhotos);
+    } catch (err: any) {
+      // If validation fails, show an error and do NOT update the photos state
+      setPhotoValidationError(err.message || "An unknown validation error occurred.");
+    } finally {
+      setValidatingPhotoKey(null);
+    }
+  };
 
   // ✅ College to Courses Mapping
   const collegeCoursesMap: { [key: string]: string[] } = {
@@ -580,7 +708,23 @@ export function StudentRegistrationForm({
                 <span className="w-1 h-1 rounded-full bg-[#b32032] mr-3"></span>
                 Face Photo Verification
               </h3>
-              <FacePhotoCapture photos={facePhotos} onPhotosChange={setFacePhotos} disabled={loading || showVerification} />
+
+              {/* Pass the new handler and validation state to the component */}
+              <FacePhotoCapture
+                photos={facePhotos}
+                onPhotosChange={handlePhotoCapture}
+                disabled={loading || showVerification}
+                validatingKey={validatingPhotoKey}
+              />
+
+              {/* Display validation error for photos */}
+              {photoValidationError && (
+                <Alert variant="destructive" className="mt-4">
+                  <AlertDescription className="font-semibold text-center">
+                    {photoValidationError}
+                  </AlertDescription>
+                </Alert>
+              )}
             </div>
 
             {/* Guardian Information */}
