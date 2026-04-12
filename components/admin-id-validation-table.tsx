@@ -1,11 +1,12 @@
 "use client"
 
-import { Eye } from "lucide-react"
+import { Eye, Search } from "lucide-react"
 import { ColumnDef } from "@tanstack/react-table"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { DataTable } from "@/components/osa-data-table"
 import { AdminIdValidationDialog } from "@/components/admin-id-validation-dialog"
 
@@ -25,7 +26,6 @@ export type ValidationRequest = {
   selfiePictures: {
     properHaircut?: string
     hairColor?: string
-    // Legacy fields for backward compatibility
     front?: string
     left?: string
     back?: string
@@ -68,11 +68,23 @@ export function AdminIdValidationTable({
   sortOrder,
   onSortChange,
   loading,
-  onAcceptSuccess, // ✅ now destructured
-  onRejectSuccess, // ✅ now destructured
+  onAcceptSuccess,
+  onRejectSuccess,
 }: Props) {
   const [selected, setSelected] = useState<ValidationRequest | null>(null)
   const [open, setOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+
+  const filteredRequests = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return requests
+    return requests.filter(
+      (r) =>
+        r.studentName?.toLowerCase().includes(q) ||
+        r.tupId?.toLowerCase().includes(q) ||
+        r.email?.toLowerCase().includes(q)
+    )
+  }, [requests, searchQuery])
 
   const handleUpdate = () => {
     setOpen(false)
@@ -83,33 +95,26 @@ export function AdminIdValidationTable({
   const cellBase = "flex items-center h-full"
 
   const columns: ColumnDef<ValidationRequest>[] = [
-    // STUDENT NAME — SORTABLE
     {
       accessorKey: "studentName",
       header: () => <div className={cellBase}>Student Name</div>,
       cell: ({ row }) => row.original.studentName,
     },
-
-    // NOT SORTABLE
     {
       accessorKey: "tupId",
       header: () => <div className={cellBase}>TUP ID</div>,
       enableSorting: false,
     },
-
     {
       accessorKey: "email",
       header: () => <div className={cellBase}>Email</div>,
       enableSorting: false,
     },
-
     {
       accessorKey: "yearLevel",
       header: () => <div className={cellBase}>Year Level</div>,
       cell: ({ row }) => row.original.yearLevel,
     },
-
-    // REQUESTED AT — SORTABLE
     {
       accessorKey: "requestTime",
       header: () => <div className={cellBase}>Requested At</div>,
@@ -124,8 +129,6 @@ export function AdminIdValidationTable({
         })
       },
     },
-
-    // NOT SORTABLE
     {
       accessorKey: "status",
       header: () => <div className={cellBase}>Status</div>,
@@ -144,8 +147,6 @@ export function AdminIdValidationTable({
       ),
       enableSorting: false,
     },
-
-    // NOT SORTABLE
     {
       id: "action",
       header: () => <div className="flex justify-center">Action</div>,
@@ -169,9 +170,20 @@ export function AdminIdValidationTable({
 
   return (
     <>
+      {/* Search Bar */}
+      <div className="relative w-full max-w-sm mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+        <Input
+          placeholder="Search by name, TUP ID, or email..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       <DataTable
         columns={columns}
-        data={requests}
+        data={filteredRequests}
         hasMore={hasMore}
         lastRequestId={lastRequestId}
         onPageChange={onPageChange}
@@ -190,8 +202,8 @@ export function AdminIdValidationTable({
         onClose={() => setOpen(false)}
         request={selected}
         onUpdate={handleUpdate}
-        onAcceptSuccess={onAcceptSuccess} // ✅ now passed through
-        onRejectSuccess={onRejectSuccess} // ✅ now passed through
+        onAcceptSuccess={onAcceptSuccess}
+        onRejectSuccess={onRejectSuccess}
       />
     </>
   )
