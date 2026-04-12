@@ -34,13 +34,16 @@ export function EntranceExitLogs() {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
-  // Logic from Version 2 (Improved filtering and safe timestamp handling)
+  // Real-time listener for Firestore
   useEffect(() => {
     setLoading(true);
     setError("");
 
-    const docRef = doc(db, ENTRANCE_EXIT_LOGS_COLLECTION, selectedDate);
+    // Convert date to Firestore document ID format (YYYY-MM-DD)
+    const docId = selectedDate;
+    const docRef = doc(db, ENTRANCE_EXIT_LOGS_COLLECTION, docId);
 
+    // Set up real-time listener
     const unsubscribe = onSnapshot(
       docRef,
       (docSnap) => {
@@ -54,17 +57,15 @@ export function EntranceExitLogs() {
         const data = docSnap.data();
         const logs = data.logs || [];
 
-        // ✅ VERSION 2 LOGIC: Case-insensitive filtering and safe optional chaining
+        // Separate entrance and exit logs
         const entrance = logs
-          .filter((log: any) => log.action?.toLowerCase() === "entrance")
+          .filter((log: any) => log.action === "entrance")
           .map((log: any, index: number) => ({
-            id: `entrance-${index}-${log.timestamp?.toMillis?.() || Date.now()}`,
+            id: `entrance-${index}-${log.timestamp?.toMillis() || Date.now()}`,
             studentId: log.studentId,
             action: log.action,
             gateId: log.gateId,
-            timestamp:
-              log.timestamp?.toDate?.().toISOString() ||
-              new Date().toISOString(),
+            timestamp: log.timestamp?.toDate().toISOString() || new Date().toISOString(),
             confidenceScore: log.confidenceScore,
             scannedBy: log.scannedBy,
           }))
@@ -74,15 +75,13 @@ export function EntranceExitLogs() {
           );
 
         const exit = logs
-          .filter((log: any) => log.action?.toLowerCase() === "exit")
+          .filter((log: any) => log.action === "exit")
           .map((log: any, index: number) => ({
-            id: `exit-${index}-${log.timestamp?.toMillis?.() || Date.now()}`,
+            id: `exit-${index}-${log.timestamp?.toMillis() || Date.now()}`,
             studentId: log.studentId,
             action: log.action,
             gateId: log.gateId,
-            timestamp:
-              log.timestamp?.toDate?.().toISOString() ||
-              new Date().toISOString(),
+            timestamp: log.timestamp?.toDate().toISOString() || new Date().toISOString(),
             confidenceScore: log.confidenceScore,
             scannedBy: log.scannedBy,
           }))
@@ -102,6 +101,7 @@ export function EntranceExitLogs() {
       }
     );
 
+    // Cleanup listener on unmount or date change
     return () => unsubscribe();
   }, [selectedDate]);
 
@@ -143,19 +143,32 @@ export function EntranceExitLogs() {
         <table className="w-full">
           <thead>
             <tr className="border-b border-gray-200 bg-gray-50">
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">TUP ID</th>
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Action</th>
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Gate ID</th>
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Timestamp</th>
-              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">Confidence Score</th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                TUP ID
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                Action
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                Gate ID
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                Timestamp
+              </th>
+              <th className="px-4 py-3 text-left text-sm font-semibold text-gray-700">
+                Confidence Score
+              </th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-200">
             {currentLogs.map((log) => (
               <tr key={log.id} className="hover:bg-gray-50 transition">
-                <td className="px-4 py-3 text-sm font-medium text-gray-900">{log.studentId}</td>
+                <td className="px-4 py-3 text-sm font-medium text-gray-900">
+                  {log.studentId}
+                </td>
                 <td className="px-4 py-3 text-sm">
                   <Badge
+                    variant={logType === "entrance" ? "default" : "secondary"}
                     className={
                       logType === "entrance"
                         ? "bg-green-100 text-green-800 hover:bg-green-200"
@@ -165,8 +178,12 @@ export function EntranceExitLogs() {
                     {log.action.toUpperCase()}
                   </Badge>
                 </td>
-                <td className="px-4 py-3 text-sm text-gray-700">{log.gateId}</td>
-                <td className="px-4 py-3 text-sm text-gray-700">{formatTimestamp(log.timestamp)}</td>
+                <td className="px-4 py-3 text-sm text-gray-700">
+                  {log.gateId}
+                </td>
+                <td className="px-4 py-3 text-sm text-gray-700">
+                  {formatTimestamp(log.timestamp)}
+                </td>
                 <td className="px-4 py-3 text-sm">
                   <span
                     className={`font-medium ${
@@ -190,7 +207,7 @@ export function EntranceExitLogs() {
 
   return (
     <div className="space-y-6">
-      {/* Date Selector & Stats (Version 1 UI) */}
+      {/* Date Selector & Stats */}
       <Card>
         <CardContent className="pt-6">
           <div className="flex flex-col sm:flex-row items-start sm:items-center gap-4 justify-between">
@@ -213,11 +230,15 @@ export function EntranceExitLogs() {
             <div className="flex gap-6 items-end pb-1">
               <div className="text-center">
                 <p className="text-sm text-gray-600 mb-1">Total Entrance</p>
-                <p className="text-2xl font-bold text-green-600">{entranceLogs.length}</p>
+                <p className="text-2xl font-bold text-green-600">
+                  {entranceLogs.length}
+                </p>
               </div>
               <div className="text-center">
                 <p className="text-sm text-gray-600 mb-1">Total Exit</p>
-                <p className="text-2xl font-bold text-blue-600">{exitLogs.length}</p>
+                <p className="text-2xl font-bold text-blue-600">
+                  {exitLogs.length}
+                </p>
               </div>
             </div>
           </div>
@@ -230,38 +251,44 @@ export function EntranceExitLogs() {
         </div>
       )}
 
-      {/* Tabbed Logs Card (Version 1 UI) */}
+      {/* Tabbed Logs Card */}
       <Card className="rounded-2xl shadow-sm">
         <CardHeader>
           <CardTitle className="text-xl">Log Type</CardTitle>
-          <p className="text-sm text-muted-foreground">Select which type of logs to view</p>
+          <p className="text-sm text-muted-foreground">
+            Select which type of logs to view
+          </p>
         </CardHeader>
 
         <CardContent className="space-y-6">
+          {/* Tab Selection */}
           <div className="grid gap-3 sm:grid-cols-2">
-            {/* Entrance Selection Label */}
             <Label
               htmlFor="entrance"
               className={cn(
                 "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition",
-                logType === "entrance" ? "border-green-500 bg-green-50" : "hover:bg-muted"
+                logType === "entrance" 
+                  ? "border-green-500 bg-green-50" 
+                  : "hover:bg-muted"
               )}
               onClick={() => setLogType("entrance")}
             >
-              <div
-                className={cn(
-                  "mt-1 h-4 w-4 rounded-full border-2 flex items-center justify-center",
-                  logType === "entrance" ? "border-green-500" : "border-gray-300"
+              <div className={cn(
+                "mt-1 h-4 w-4 rounded-full border-2 flex items-center justify-center",
+                logType === "entrance" ? "border-green-500" : "border-gray-300"
+              )}>
+                {logType === "entrance" && (
+                  <div className="h-2 w-2 rounded-full bg-green-500" />
                 )}
-              >
-                {logType === "entrance" && <div className="h-2 w-2 rounded-full bg-green-500" />}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <ArrowDownToLine className="h-4 w-4 text-green-600" />
                   <p className="font-medium">Entrance Logs</p>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">View all entrance activities</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  View all entrance activities for the selected date
+                </p>
               </div>
               <div className="flex items-center">
                 <span className="flex h-2 w-2 relative">
@@ -271,29 +298,32 @@ export function EntranceExitLogs() {
               </div>
             </Label>
 
-            {/* Exit Selection Label */}
             <Label
               htmlFor="exit"
               className={cn(
                 "flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition",
-                logType === "exit" ? "border-blue-500 bg-blue-50" : "hover:bg-muted"
+                logType === "exit" 
+                  ? "border-blue-500 bg-blue-50" 
+                  : "hover:bg-muted"
               )}
               onClick={() => setLogType("exit")}
             >
-              <div
-                className={cn(
-                  "mt-1 h-4 w-4 rounded-full border-2 flex items-center justify-center",
-                  logType === "exit" ? "border-blue-500" : "border-gray-300"
+              <div className={cn(
+                "mt-1 h-4 w-4 rounded-full border-2 flex items-center justify-center",
+                logType === "exit" ? "border-blue-500" : "border-gray-300"
+              )}>
+                {logType === "exit" && (
+                  <div className="h-2 w-2 rounded-full bg-blue-500" />
                 )}
-              >
-                {logType === "exit" && <div className="h-2 w-2 rounded-full bg-blue-500" />}
               </div>
               <div className="flex-1">
                 <div className="flex items-center gap-2">
                   <ArrowUpFromLine className="h-4 w-4 text-blue-600" />
                   <p className="font-medium">Exit Logs</p>
                 </div>
-                <p className="text-xs text-muted-foreground mt-1">View all exit activities</p>
+                <p className="text-xs text-muted-foreground mt-1">
+                  View all exit activities for the selected date
+                </p>
               </div>
               <div className="flex items-center">
                 <span className="flex h-2 w-2 relative">
@@ -304,7 +334,10 @@ export function EntranceExitLogs() {
             </Label>
           </div>
 
-          <div className="pt-4">{renderLogsTable()}</div>
+          {/* Table Display */}
+          <div className="pt-4">
+            {renderLogsTable()}
+          </div>
         </CardContent>
       </Card>
     </div>
