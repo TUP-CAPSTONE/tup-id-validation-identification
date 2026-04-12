@@ -11,6 +11,7 @@ import {
 } from "@/components/ui/table"
 import { Button } from "@/components/ui/button"
 import { Badge } from "@/components/ui/badge"
+import { Input } from "@/components/ui/input"
 import {
   AlertDialog,
   AlertDialogAction,
@@ -22,7 +23,7 @@ import {
   AlertDialogTitle,
 } from "@/components/ui/alert-dialog"
 import { Student } from "@/components/types/students"
-import { Loader2 } from "lucide-react"
+import { Loader2, Search } from "lucide-react"
 import { toast } from "sonner"
 
 interface StudentAccountsTableProps {
@@ -39,6 +40,17 @@ export function StudentAccountsTable({
   const [selectedStudent, setSelectedStudent] = useState<Student | null>(null)
   const [actionLoading, setActionLoading] = useState(false)
   const [dialogOpen, setDialogOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+
+  const filteredStudents = students.filter((student) => {
+    const q = searchQuery.toLowerCase().trim()
+    if (!q) return true
+    return (
+      student.fullName.toLowerCase().includes(q) ||
+      student.email.toLowerCase().includes(q) ||
+      student.tupId.toLowerCase().includes(q)
+    )
+  })
 
   const handleStatusToggle = async () => {
     if (!selectedStudent) return
@@ -97,6 +109,18 @@ export function StudentAccountsTable({
 
   return (
     <>
+      {/* Search Bar */}
+      <div className="relative mb-4">
+        <Search className="absolute left-2.5 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          type="search"
+          placeholder="Search by name, email, or TUP ID..."
+          className="pl-8"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      </div>
+
       <div className="rounded-lg border">
         <Table>
           <TableHeader>
@@ -105,49 +129,51 @@ export function StudentAccountsTable({
               <TableHead className="font-semibold">Name</TableHead>
               <TableHead className="font-semibold">Email</TableHead>
               <TableHead className="font-semibold">Status</TableHead>
-              <TableHead className="font-semibold text-right">
-                Actions
-              </TableHead>
+              <TableHead className="font-semibold text-right">Actions</TableHead>
             </TableRow>
           </TableHeader>
           <TableBody>
-            {students.map((student) => (
-              <TableRow key={student.uid}>
-                <TableCell className="font-medium">{student.tupId}</TableCell>
-                <TableCell>{student.fullName}</TableCell>
-                <TableCell className="text-gray-600">{student.email}</TableCell>
-                <TableCell>
-                  <Badge
-                    variant={
-                      student.accountStatus === "active"
-                        ? "default"
-                        : "secondary"
-                    }
-                    className={
-                      student.accountStatus === "active"
-                        ? "bg-green-100 text-green-800 hover:bg-green-100"
-                        : "bg-red-100 text-red-800 hover:bg-red-100"
-                    }
-                  >
-                    {student.accountStatus === "active" ? "Active" : "Disabled"}
-                  </Badge>
-                </TableCell>
-                <TableCell className="text-right">
-                  <Button
-                    variant={
-                      student.accountStatus === "active"
-                        ? "destructive"
-                        : "default"
-                    }
-                    size="sm"
-                    onClick={() => openDialog(student)}
-                    className="rounded-lg"
-                  >
-                    {student.accountStatus === "active" ? "Disable" : "Enable"}
-                  </Button>
+            {filteredStudents.length === 0 ? (
+              <TableRow>
+                <TableCell colSpan={5} className="text-center py-8 text-gray-500">
+                  No students match your search
                 </TableCell>
               </TableRow>
-            ))}
+            ) : (
+              filteredStudents.map((student) => (
+                <TableRow key={student.uid}>
+                  <TableCell className="font-medium">{student.tupId}</TableCell>
+                  <TableCell>{student.fullName}</TableCell>
+                  <TableCell className="text-gray-600">{student.email}</TableCell>
+                  <TableCell>
+                    <Badge
+                      variant={
+                        student.accountStatus === "active" ? "default" : "secondary"
+                      }
+                      className={
+                        student.accountStatus === "active"
+                          ? "bg-green-100 text-green-800 hover:bg-green-100"
+                          : "bg-red-100 text-red-800 hover:bg-red-100"
+                      }
+                    >
+                      {student.accountStatus === "active" ? "Active" : "Disabled"}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-right">
+                    <Button
+                      variant={
+                        student.accountStatus === "active" ? "destructive" : "default"
+                      }
+                      size="sm"
+                      onClick={() => openDialog(student)}
+                      className="rounded-lg"
+                    >
+                      {student.accountStatus === "active" ? "Disable" : "Enable"}
+                    </Button>
+                  </TableCell>
+                </TableRow>
+              ))
+            )}
           </TableBody>
         </Table>
       </div>
@@ -167,9 +193,7 @@ export function StudentAccountsTable({
             </AlertDialogDescription>
           </AlertDialogHeader>
           <AlertDialogFooter>
-            <AlertDialogCancel disabled={actionLoading}>
-              Cancel
-            </AlertDialogCancel>
+            <AlertDialogCancel disabled={actionLoading}>Cancel</AlertDialogCancel>
             <AlertDialogAction
               onClick={handleStatusToggle}
               disabled={actionLoading}
