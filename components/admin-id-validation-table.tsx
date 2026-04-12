@@ -10,6 +10,7 @@ import { Input } from "@/components/ui/input"
 import { DataTable } from "@/components/osa-data-table"
 import { AdminIdValidationDialog } from "@/components/admin-id-validation-dialog"
 
+// ── Types ─────────────────────────────────────────────────────────────────────
 export type ValidationRequest = {
   id?: string
   requestId: string
@@ -46,14 +47,12 @@ interface Props {
   onPageSizeChange: (size: number) => void
   statusFilter?: string
   onStatusFilterChange: (status: string | undefined) => void
-  sortBy: string
-  sortOrder: "asc" | "desc"
-  onSortChange: (column: string, order: "asc" | "desc") => void
   loading: boolean
   onAcceptSuccess: () => void
   onRejectSuccess: () => void
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
 export function AdminIdValidationTable({
   requests,
   onUpdate,
@@ -64,9 +63,6 @@ export function AdminIdValidationTable({
   onPageSizeChange,
   statusFilter,
   onStatusFilterChange,
-  sortBy,
-  sortOrder,
-  onSortChange,
   loading,
   onAcceptSuccess,
   onRejectSuccess,
@@ -191,9 +187,6 @@ export function AdminIdValidationTable({
         onPageSizeChange={onPageSizeChange}
         statusFilter={statusFilter}
         onStatusFilterChange={onStatusFilterChange}
-        sortBy={sortBy}
-        sortOrder={sortOrder}
-        onSortChange={onSortChange}
         loading={loading}
       />
 

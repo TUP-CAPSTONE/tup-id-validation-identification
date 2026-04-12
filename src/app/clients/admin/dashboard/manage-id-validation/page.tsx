@@ -1,8 +1,8 @@
 "use client"
 
 import { useState, useEffect, useCallback, useRef } from "react"
-import { AdminSidebar } from "@/components/admin-sidebar"
 import { SidebarProvider } from "@/components/ui/sidebar"
+import { AdminSidebar } from "@/components/admin-sidebar"
 import { toast } from "sonner"
 import Confetti from "react-confetti"
 import { useWindowSize } from "react-use"
@@ -16,6 +16,7 @@ import {
   type EffectsSettings,
 } from "@/components/admin-nav-user"
 
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface ValidationResponse {
   requests: ValidationRequest[]
   hasMore: boolean
@@ -23,28 +24,16 @@ interface ValidationResponse {
   totalFetched: number
 }
 
-export default function AdminValidationPage() {
-  const [requests, setRequests] = useState<ValidationRequest[]>([])
-  const [loading, setLoading] = useState(true)
-  const [hasMore, setHasMore] = useState(false)
-  const [lastRequestId, setLastRequestId] = useState<string | null>(null)
-  const [pageSize, setPageSize] = useState(10)
-  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
-  const [sortBy, setSortBy] = useState("requestTime")
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
-
-  const [showConfetti, setShowConfetti] = useState(false)
-  const { width, height } = useWindowSize()
-
-  const [rejectFlash, setRejectFlash] = useState(false)
-  const [flashCount, setFlashCount] = useState(0)
-
+// ── Hook: Effects (sound + visual) ────────────────────────────────────────────
+function useEffects() {
   const [effectsSettings, setEffectsSettings] = useState<EffectsSettings>({
     soundEnabled: true,
     visualEnabled: true,
   })
+  const [showConfetti, setShowConfetti] = useState(false)
+  const [rejectFlash, setRejectFlash] = useState(false)
+  const [flashCount, setFlashCount] = useState(0)
 
-  // Preloaded audio refs — ready to fire instantly with no init delay
   const acceptAudioRef = useRef<HTMLAudioElement | null>(null)
   const rejectAudioRef = useRef<HTMLAudioElement | null>(null)
 
@@ -57,9 +46,8 @@ export default function AdminValidationPage() {
 
   useEffect(() => {
     setEffectsSettings(getEffectsSettings())
-    const handler = (e: Event) => {
+    const handler = (e: Event) =>
       setEffectsSettings((e as CustomEvent<EffectsSettings>).detail)
-    }
     window.addEventListener("effectsSettingsChanged", handler)
     return () => window.removeEventListener("effectsSettingsChanged", handler)
   }, [])
@@ -67,13 +55,13 @@ export default function AdminValidationPage() {
   useEffect(() => {
     if (flashCount <= 0) return
     const BLINK_DURATION = 150
-    setRejectFlash(true)
+    const TOTAL_TOGGLES = 10
     let count = 0
-    const totalToggles = 10
+    setRejectFlash(true)
     const interval = setInterval(() => {
       count++
       setRejectFlash((prev) => !prev)
-      if (count >= totalToggles) {
+      if (count >= TOTAL_TOGGLES) {
         clearInterval(interval)
         setRejectFlash(false)
         setFlashCount(0)
@@ -82,79 +70,10 @@ export default function AdminValidationPage() {
     return () => clearInterval(interval)
   }, [flashCount])
 
-  const fetchRequests = async (
-    cursor: string | null = null,
-    newPageSize: number = pageSize,
-    newStatus?: string,
-    newSortBy?: string,
-    newSortOrder?: "asc" | "desc"
-  ) => {
-    try {
-      setLoading(true)
-      const params = new URLSearchParams({ pageSize: newPageSize.toString() })
-      if (cursor) params.append("lastRequestId", cursor)
-      if (newStatus) params.append("status", newStatus)
-      if (newSortBy) params.append("sortBy", newSortBy)
-      if (newSortOrder) params.append("sortOrder", newSortOrder)
-
-      const response = await fetch(`/api/admin/validation-request?${params.toString()}`)
-
-      if (!response.ok) {
-        if (response.status === 429) {
-          const data = await response.json()
-          toast.error("Rate limit exceeded", {
-            description: data.error || "Too many requests. Please try again later.",
-          })
-          return
-        }
-        const errorText = await response.text()
-        console.error("API Error Response:", errorText)
-        toast.error("Error", {
-          description: `Failed to fetch validation requests (Status: ${response.status})`,
-        })
-        return
-      }
-
-      const data: ValidationResponse = await response.json()
-      setRequests(data.requests)
-      setHasMore(data.hasMore)
-      setLastRequestId(data.lastRequestId)
-    } catch (error) {
-      console.error("Error fetching requests:", error)
-      toast.error("Error", { description: "Failed to load validation requests. Please try again." })
-    } finally {
-      setLoading(false)
-    }
-  }
-
-  useEffect(() => {
-    fetchRequests()
-  }, [])
-
-  const handlePageChange = (cursor: string | null) => {
-    fetchRequests(cursor, pageSize, statusFilter, sortBy, sortOrder)
-  }
-  const handlePageSizeChange = (newSize: number) => {
-    setPageSize(newSize)
-    fetchRequests(null, newSize, statusFilter, sortBy, sortOrder)
-  }
-  const handleStatusFilterChange = (newStatus: string | undefined) => {
-    setStatusFilter(newStatus)
-    fetchRequests(null, pageSize, newStatus, sortBy, sortOrder)
-  }
-  const handleSortChange = (column: string, order: "asc" | "desc") => {
-    setSortBy(column)
-    setSortOrder(order)
-    fetchRequests(null, pageSize, statusFilter, column, order)
-  }
-  const handleUpdate = () => {
-    fetchRequests(null, pageSize, statusFilter, sortBy, sortOrder)
-  }
-
-  const triggerCelebration = useCallback(() => {
+  const triggerAccept = useCallback(() => {
     if (effectsSettings.soundEnabled && acceptAudioRef.current) {
       acceptAudioRef.current.currentTime = 0
-      acceptAudioRef.current.play().catch((err) => console.error("Error playing sound:", err))
+      acceptAudioRef.current.play().catch(console.error)
     }
     if (effectsSettings.visualEnabled) {
       setShowConfetti(true)
@@ -165,18 +84,123 @@ export default function AdminValidationPage() {
   const triggerReject = useCallback(() => {
     if (effectsSettings.soundEnabled && rejectAudioRef.current) {
       rejectAudioRef.current.currentTime = 0
-      rejectAudioRef.current.play().catch((err) => console.error("Error playing sound:", err))
+      rejectAudioRef.current.play().catch(console.error)
     }
     if (effectsSettings.visualEnabled) {
       setFlashCount((prev) => prev + 1)
     }
   }, [effectsSettings])
 
+  return { showConfetti, rejectFlash, triggerAccept, triggerReject }
+}
+
+// ── Hook: Validation Requests ─────────────────────────────────────────────────
+function useValidationRequests() {
+  const [requests, setRequests] = useState<ValidationRequest[]>([])
+  const [loading, setLoading] = useState(true)
+  const [hasMore, setHasMore] = useState(false)
+  const [lastRequestId, setLastRequestId] = useState<string | null>(null)
+  const [pageSize, setPageSize] = useState(10)
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
+
+  const fetchRequests = useCallback(async (
+    cursor: string | null = null,
+    size: number = pageSize,
+    status?: string,
+  ) => {
+    try {
+      setLoading(true)
+      const params = new URLSearchParams({ pageSize: size.toString() })
+      if (cursor) params.append("lastRequestId", cursor)
+      if (status) params.append("status", status)
+
+      const res = await fetch(`/api/admin/validation-request?${params.toString()}`)
+
+      if (!res.ok) {
+        if (res.status === 429) {
+          const data = await res.json()
+          toast.error("Rate limit exceeded", {
+            description: data.error || "Too many requests. Please try again later.",
+          })
+          return
+        }
+        const errorText = await res.text()
+        console.error("API Error Response:", errorText)
+        toast.error("Error", {
+          description: `Failed to fetch validation requests (Status: ${res.status})`,
+        })
+        return
+      }
+
+      const data: ValidationResponse = await res.json()
+      setRequests(data.requests)
+      setHasMore(data.hasMore)
+      setLastRequestId(data.lastRequestId)
+    } catch (err) {
+      console.error("Error fetching requests:", err)
+      toast.error("Error", { description: "Failed to load validation requests. Please try again." })
+    } finally {
+      setLoading(false)
+    }
+  }, [pageSize])
+
+  useEffect(() => {
+    fetchRequests()
+  }, [])
+
+  const handlePageChange = (cursor: string | null) =>
+    fetchRequests(cursor, pageSize, statusFilter)
+
+  const handlePageSizeChange = (newSize: number) => {
+    setPageSize(newSize)
+    fetchRequests(null, newSize, statusFilter)
+  }
+
+  const handleStatusFilterChange = (newStatus: string | undefined) => {
+    setStatusFilter(newStatus)
+    fetchRequests(null, pageSize, newStatus)
+  }
+
+  const handleUpdate = () => fetchRequests(null, pageSize, statusFilter)
+
+  return {
+    requests,
+    loading,
+    hasMore,
+    lastRequestId,
+    pageSize,
+    statusFilter,
+    handlePageChange,
+    handlePageSizeChange,
+    handleStatusFilterChange,
+    handleUpdate,
+  }
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+export default function AdminValidationPage() {
+  const { width, height } = useWindowSize()
+  const { showConfetti, rejectFlash, triggerAccept, triggerReject } = useEffects()
+  const {
+    requests,
+    loading,
+    hasMore,
+    lastRequestId,
+    pageSize,
+    statusFilter,
+    handlePageChange,
+    handlePageSizeChange,
+    handleStatusFilterChange,
+    handleUpdate,
+  } = useValidationRequests()
+
   return (
     <SidebarProvider>
       <div className="flex h-screen w-full">
         <AdminSidebar />
+
         <main className="flex-1 overflow-y-auto bg-gray-50 relative">
+          {/* Confetti */}
           {showConfetti && (
             <Confetti
               width={width}
@@ -194,6 +218,7 @@ export default function AdminValidationPage() {
             />
           )}
 
+          {/* Reject flash overlay */}
           <div
             aria-hidden="true"
             style={{
@@ -209,15 +234,22 @@ export default function AdminValidationPage() {
 
           <div className="min-h-full p-8">
             <div className="max-w-7xl mx-auto">
+              {/* Header */}
               <div className="mb-10">
-                <h1 className="text-5xl font-bold text-gray-900 mb-2">ID Validation Requests</h1>
-                <p className="text-gray-600 text-lg">Review and manage student ID validation requests</p>
+                <h1 className="text-5xl font-bold text-gray-900 mb-2">
+                  ID Validation Requests
+                </h1>
+                <p className="text-gray-600 text-lg">
+                  Review and manage student ID validation requests
+                </p>
               </div>
+
+              {/* Table */}
               <div className="bg-white rounded-lg shadow-sm">
                 {loading && requests.length === 0 ? (
                   <div className="flex items-center justify-center p-8">
                     <div className="text-center">
-                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4"></div>
+                      <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto mb-4" />
                       <p>Loading requests...</p>
                     </div>
                   </div>
@@ -232,11 +264,8 @@ export default function AdminValidationPage() {
                     onPageSizeChange={handlePageSizeChange}
                     statusFilter={statusFilter}
                     onStatusFilterChange={handleStatusFilterChange}
-                    sortBy={sortBy}
-                    sortOrder={sortOrder}
-                    onSortChange={handleSortChange}
                     loading={loading}
-                    onAcceptSuccess={triggerCelebration}
+                    onAcceptSuccess={triggerAccept}
                     onRejectSuccess={triggerReject}
                   />
                 )}

@@ -41,9 +41,9 @@ interface DataTableProps<TData, TValue> {
   onPageSizeChange: (size: number) => void
   statusFilter?: string
   onStatusFilterChange: (status: string | undefined) => void
-  sortBy: string
-  sortOrder: "asc" | "desc"
-  onSortChange: (column: string, order: "asc" | "desc") => void
+  sortBy?: string
+  sortOrder?: "asc" | "desc"
+  onSortChange?: (column: string, order: "asc" | "desc") => void
   loading: boolean
 }
 
@@ -57,15 +57,14 @@ export function DataTable<TData, TValue>({
   onPageSizeChange,
   statusFilter,
   onStatusFilterChange,
-  sortBy,
-  sortOrder,
+  sortBy = "",
+  sortOrder = "desc",
   onSortChange,
   loading,
 }: DataTableProps<TData, TValue>) {
   const [currentPage, setCurrentPage] = useState(1)
   const [pageHistory, setPageHistory] = useState<(string | null)[]>([null])
 
-  // Reset to page 1 when filters or page size changes
   useEffect(() => {
     setCurrentPage(1)
     setPageHistory([null])
@@ -92,7 +91,7 @@ export function DataTable<TData, TValue>({
       const newPage = currentPage - 1
       setCurrentPage(newPage)
       const newHistory = [...pageHistory]
-      newHistory.pop() // Remove current page
+      newHistory.pop()
       setPageHistory(newHistory)
       const cursor = newHistory[newHistory.length - 1]
       onPageChange(cursor)
@@ -100,12 +99,10 @@ export function DataTable<TData, TValue>({
   }
 
   const handleSortToggle = (column: string) => {
+    if (!onSortChange) return
     if (sortBy === column) {
-      // Toggle order
-      const newOrder = sortOrder === "asc" ? "desc" : "asc"
-      onSortChange(column, newOrder)
+      onSortChange(column, sortOrder === "asc" ? "desc" : "asc")
     } else {
-      // New column, default to desc
       onSortChange(column, "desc")
     }
   }
@@ -147,7 +144,9 @@ export function DataTable<TData, TValue>({
               <TableRow key={headerGroup.id}>
                 {headerGroup.headers.map((header) => {
                   const columnKey = header.column.id
-                  const isSortable = ["studentName", "yearLevel", "requestTime"].includes(columnKey)
+                  const isSortable =
+                    onSortChange !== undefined &&
+                    ["studentName", "yearLevel", "requestTime"].includes(columnKey)
 
                   return (
                     <TableHead key={header.id}>

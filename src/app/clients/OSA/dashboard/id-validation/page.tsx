@@ -27,6 +27,7 @@ import {
   type OsaEffectsSettings,
 } from "@/components/osa-nav-user"
 
+// ── Types ─────────────────────────────────────────────────────────────────────
 interface ValidationResponse {
   requests: ValidationRequest[]
   hasMore: boolean
@@ -34,25 +35,15 @@ interface ValidationResponse {
   totalFetched: number
 }
 
-export default function ValidationPage() {
-  const [requests, setRequests] = useState<ValidationRequest[]>([])
-  const [loading, setLoading] = useState(true)
-  const [hasMore, setHasMore] = useState(false)
-  const [lastRequestId, setLastRequestId] = useState<string | null>(null)
-  const [pageSize, setPageSize] = useState(10)
-  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
-  const [sortBy, setSortBy] = useState("requestTime")
-  const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc")
-
-  // ── Effects ────────────────────────────────────────────────────────────────
-  const [showConfetti, setShowConfetti] = useState(false)
-  const [rejectFlash, setRejectFlash] = useState(false)
-  const [flashCount, setFlashCount] = useState(0)
+// ── Hook: Effects (sound + visual) ────────────────────────────────────────────
+function useEffects() {
   const [effectsSettings, setEffectsSettings] = useState<OsaEffectsSettings>({
     soundEnabled: true,
     visualEnabled: true,
   })
-  const { width, height } = useWindowSize()
+  const [showConfetti, setShowConfetti] = useState(false)
+  const [rejectFlash, setRejectFlash] = useState(false)
+  const [flashCount, setFlashCount] = useState(0)
 
   const acceptAudioRef = useRef<HTMLAudioElement | null>(null)
   const rejectAudioRef = useRef<HTMLAudioElement | null>(null)
@@ -75,12 +66,13 @@ export default function ValidationPage() {
   useEffect(() => {
     if (flashCount <= 0) return
     const BLINK_DURATION = 150
-    setRejectFlash(true)
+    const TOTAL_TOGGLES = 10
     let count = 0
+    setRejectFlash(true)
     const interval = setInterval(() => {
       count++
       setRejectFlash((prev) => !prev)
-      if (count >= 10) {
+      if (count >= TOTAL_TOGGLES) {
         clearInterval(interval)
         setRejectFlash(false)
         setFlashCount(0)
@@ -89,10 +81,10 @@ export default function ValidationPage() {
     return () => clearInterval(interval)
   }, [flashCount])
 
-  const triggerCelebration = useCallback(() => {
+  const triggerAccept = useCallback(() => {
     if (effectsSettings.soundEnabled && acceptAudioRef.current) {
       acceptAudioRef.current.currentTime = 0
-      acceptAudioRef.current.play().catch((err) => console.error("Error playing sound:", err))
+      acceptAudioRef.current.play().catch(console.error)
     }
     if (effectsSettings.visualEnabled) {
       setShowConfetti(true)
@@ -103,82 +95,117 @@ export default function ValidationPage() {
   const triggerReject = useCallback(() => {
     if (effectsSettings.soundEnabled && rejectAudioRef.current) {
       rejectAudioRef.current.currentTime = 0
-      rejectAudioRef.current.play().catch((err) => console.error("Error playing sound:", err))
+      rejectAudioRef.current.play().catch(console.error)
     }
     if (effectsSettings.visualEnabled) {
       setFlashCount((prev) => prev + 1)
     }
   }, [effectsSettings])
-  // ──────────────────────────────────────────────────────────────────────────
 
-  const fetchRequests = async (
+  return { showConfetti, rejectFlash, triggerAccept, triggerReject }
+}
+
+// ── Hook: Validation Requests ─────────────────────────────────────────────────
+function useValidationRequests() {
+  const [requests, setRequests] = useState<ValidationRequest[]>([])
+  const [loading, setLoading] = useState(true)
+  const [hasMore, setHasMore] = useState(false)
+  const [lastRequestId, setLastRequestId] = useState<string | null>(null)
+  const [pageSize, setPageSize] = useState(10)
+  const [statusFilter, setStatusFilter] = useState<string | undefined>(undefined)
+
+  const fetchRequests = useCallback(async (
     cursor: string | null = null,
-    newPageSize: number = pageSize,
-    newStatus?: string,
-    newSortBy?: string,
-    newSortOrder?: "asc" | "desc"
+    size: number = pageSize,
+    status?: string,
   ) => {
     try {
       setLoading(true)
-      const params = new URLSearchParams({ pageSize: newPageSize.toString() })
+      const params = new URLSearchParams({ pageSize: size.toString() })
       if (cursor) params.append("lastRequestId", cursor)
-      if (newStatus) params.append("status", newStatus)
-      if (newSortBy) params.append("sortBy", newSortBy)
-      if (newSortOrder) params.append("sortOrder", newSortOrder)
+      if (status) params.append("status", status)
 
-      const response = await fetch(`/api/osa/validation-requests?${params.toString()}`)
+      const res = await fetch(`/api/osa/validation-requests?${params.toString()}`)
 
-      if (!response.ok) {
-        if (response.status === 429) {
-          const data = await response.json()
+      if (!res.ok) {
+        if (res.status === 429) {
+          const data = await res.json()
           toast.error("Rate limit exceeded", {
             description: data.error || "Too many requests. Please try again later.",
           })
           return
         }
-        const errorText = await response.text()
+        const errorText = await res.text()
         console.error("API Error Response:", errorText)
         toast.error("Error", {
-          description: `Failed to fetch validation requests (Status: ${response.status})`,
+          description: `Failed to fetch validation requests (Status: ${res.status})`,
         })
         return
       }
 
-      const data: ValidationResponse = await response.json()
+      const data: ValidationResponse = await res.json()
       setRequests(data.requests)
       setHasMore(data.hasMore)
       setLastRequestId(data.lastRequestId)
-    } catch (error) {
-      console.error("Error fetching requests:", error)
+    } catch (err) {
+      console.error("Error fetching requests:", err)
       toast.error("Error", {
         description: "Failed to load validation requests. Please try again.",
       })
     } finally {
       setLoading(false)
     }
-  }
+  }, [pageSize])
 
   useEffect(() => {
     fetchRequests()
   }, [])
 
   const handlePageChange = (cursor: string | null) =>
-    fetchRequests(cursor, pageSize, statusFilter, sortBy, sortOrder)
+    fetchRequests(cursor, pageSize, statusFilter)
+
   const handlePageSizeChange = (newSize: number) => {
     setPageSize(newSize)
-    fetchRequests(null, newSize, statusFilter, sortBy, sortOrder)
+    fetchRequests(null, newSize, statusFilter)
   }
+
   const handleStatusFilterChange = (newStatus: string | undefined) => {
     setStatusFilter(newStatus)
-    fetchRequests(null, pageSize, newStatus, sortBy, sortOrder)
+    fetchRequests(null, pageSize, newStatus)
   }
-  const handleSortChange = (column: string, order: "asc" | "desc") => {
-    setSortBy(column)
-    setSortOrder(order)
-    fetchRequests(null, pageSize, statusFilter, column, order)
+
+  const handleUpdate = () => fetchRequests(null, pageSize, statusFilter)
+
+  return {
+    requests,
+    loading,
+    hasMore,
+    lastRequestId,
+    pageSize,
+    statusFilter,
+    handlePageChange,
+    handlePageSizeChange,
+    handleStatusFilterChange,
+    handleUpdate,
   }
-  const handleUpdate = () =>
-    fetchRequests(null, pageSize, statusFilter, sortBy, sortOrder)
+}
+
+// ── Page ──────────────────────────────────────────────────────────────────────
+export default function ValidationPage() {
+  const { width, height } = useWindowSize()
+  const { showConfetti, rejectFlash, triggerAccept, triggerReject } = useEffects()
+  const {
+    requests,
+    loading,
+    hasMore,
+    lastRequestId,
+    pageSize,
+    statusFilter,
+    handlePageChange,
+    handlePageSizeChange,
+    handleStatusFilterChange,
+    handleUpdate,
+  } = useValidationRequests()
 
   return (
     <SidebarProvider
@@ -186,6 +213,7 @@ export default function ValidationPage() {
     >
       <AppSidebar />
       <SidebarInset>
+        {/* Confetti */}
         {showConfetti && (
           <Confetti
             width={width}
@@ -197,6 +225,7 @@ export default function ValidationPage() {
           />
         )}
 
+        {/* Reject flash overlay */}
         <div
           aria-hidden="true"
           style={{
@@ -210,6 +239,7 @@ export default function ValidationPage() {
           }}
         />
 
+        {/* Header */}
         <header className="sticky top-0 flex h-16 items-center gap-2 border-b px-4 bg-background z-10">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="h-4" />
@@ -224,11 +254,12 @@ export default function ValidationPage() {
           </Breadcrumb>
         </header>
 
+        {/* Table */}
         <div className="p-4">
           {loading && requests.length === 0 ? (
             <div className="flex items-center justify-center p-8">
               <div className="text-center">
-                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#b32032] mx-auto mb-4"></div>
+                <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-[#b32032] mx-auto mb-4" />
                 <p>Loading requests...</p>
               </div>
             </div>
@@ -243,11 +274,8 @@ export default function ValidationPage() {
               onPageSizeChange={handlePageSizeChange}
               statusFilter={statusFilter}
               onStatusFilterChange={handleStatusFilterChange}
-              sortBy={sortBy}
-              sortOrder={sortOrder}
-              onSortChange={handleSortChange}
               loading={loading}
-              onAcceptSuccess={triggerCelebration}
+              onAcceptSuccess={triggerAccept}
               onRejectSuccess={triggerReject}
             />
           )}

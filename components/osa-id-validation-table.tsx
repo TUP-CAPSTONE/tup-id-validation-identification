@@ -1,14 +1,16 @@
 "use client"
 
-import { Eye } from "lucide-react"
+import { Eye, Search } from "lucide-react"
 import { ColumnDef } from "@tanstack/react-table"
-import { useState } from "react"
+import { useState, useMemo } from "react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import { Input } from "@/components/ui/input"
 import { DataTable } from "@/components/osa-data-table"
 import { IdValidationDialog } from "./osa-id-validation-dialog"
 
+// ── Types ─────────────────────────────────────────────────────────────────────
 export type ValidationRequest = {
   id?: string
   requestId: string
@@ -24,7 +26,6 @@ export type ValidationRequest = {
   selfiePictures: {
     properHaircut?: string
     hairColor?: string
-    // Legacy fields for backward compatibility
     front?: string
     left?: string
     back?: string
@@ -45,14 +46,12 @@ interface Props {
   onPageSizeChange: (size: number) => void
   statusFilter?: string
   onStatusFilterChange: (status: string | undefined) => void
-  sortBy: string
-  sortOrder: "asc" | "desc"
-  onSortChange: (column: string, order: "asc" | "desc") => void
   loading: boolean
   onAcceptSuccess: () => void
   onRejectSuccess: () => void
 }
 
+// ── Component ─────────────────────────────────────────────────────────────────
 export function IdValidationTable({
   requests,
   onUpdate,
@@ -63,15 +62,24 @@ export function IdValidationTable({
   onPageSizeChange,
   statusFilter,
   onStatusFilterChange,
-  sortBy,
-  sortOrder,
-  onSortChange,
   loading,
   onAcceptSuccess,
   onRejectSuccess,
 }: Props) {
   const [selected, setSelected] = useState<ValidationRequest | null>(null)
   const [open, setOpen] = useState(false)
+  const [searchQuery, setSearchQuery] = useState("")
+
+  const filteredRequests = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase()
+    if (!q) return requests
+    return requests.filter(
+      (r) =>
+        r.studentName?.toLowerCase().includes(q) ||
+        r.tupId?.toLowerCase().includes(q) ||
+        r.email?.toLowerCase().includes(q)
+    )
+  }, [requests, searchQuery])
 
   const handleUpdate = () => {
     setOpen(false)
@@ -82,33 +90,26 @@ export function IdValidationTable({
   const cellBase = "flex items-center h-full"
 
   const columns: ColumnDef<ValidationRequest>[] = [
-    // STUDENT NAME — SORTABLE
     {
       accessorKey: "studentName",
       header: () => <div className={cellBase}>Student Name</div>,
       cell: ({ row }) => row.original.studentName,
     },
-
-    // NOT SORTABLE
     {
       accessorKey: "tupId",
       header: () => <div className={cellBase}>TUP ID</div>,
       enableSorting: false,
     },
-
     {
       accessorKey: "email",
       header: () => <div className={cellBase}>Email</div>,
       enableSorting: false,
     },
-
     {
       accessorKey: "yearLevel",
       header: () => <div className={cellBase}>Year Level</div>,
       cell: ({ row }) => row.original.yearLevel,
     },
-
-    // REQUESTED AT — SORTABLE
     {
       accessorKey: "requestTime",
       header: () => <div className={cellBase}>Requested At</div>,
@@ -123,8 +124,6 @@ export function IdValidationTable({
         })
       },
     },
-
-    // NOT SORTABLE
     {
       accessorKey: "status",
       header: () => <div className={cellBase}>Status</div>,
@@ -143,8 +142,6 @@ export function IdValidationTable({
       ),
       enableSorting: false,
     },
-
-    // NOT SORTABLE
     {
       id: "action",
       header: () => <div className="flex justify-center">Action</div>,
@@ -168,9 +165,20 @@ export function IdValidationTable({
 
   return (
     <>
+      {/* Search Bar */}
+      <div className="relative w-full max-w-sm mb-4">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-gray-400 pointer-events-none" />
+        <Input
+          placeholder="Search by name, TUP ID, or email..."
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+          className="pl-9"
+        />
+      </div>
+
       <DataTable
         columns={columns}
-        data={requests}
+        data={filteredRequests}
         hasMore={hasMore}
         lastRequestId={lastRequestId}
         onPageChange={onPageChange}
@@ -178,9 +186,6 @@ export function IdValidationTable({
         onPageSizeChange={onPageSizeChange}
         statusFilter={statusFilter}
         onStatusFilterChange={onStatusFilterChange}
-        sortBy={sortBy}
-        sortOrder={sortOrder}
-        onSortChange={onSortChange}
         loading={loading}
       />
 
