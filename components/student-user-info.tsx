@@ -10,7 +10,7 @@ import { db, auth, app } from "@/lib/firebaseConfig";
 import { onAuthStateChanged } from "firebase/auth";
 import { doc, getDoc, updateDoc, collection, getDocs, query, where, orderBy } from "firebase/firestore";
 import { getStorage, ref as storageRef, uploadBytes, getDownloadURL } from "firebase/storage";
-import { ArrowLeft, CheckCircle2, XCircle, ShieldCheck, ShieldX, Clock } from "lucide-react";
+import { ArrowLeft, CheckCircle2, XCircle, ShieldCheck, ShieldX, Clock, FileCheck, FileX } from "lucide-react";
 
 const STUDENTS_COLLECTION = process.env.NEXT_PUBLIC_FIRESTORE_STUDENTS_COLLECTION || "students";
 
@@ -19,20 +19,59 @@ interface ValidationHistoryEntry {
   id: string;
   semester: string;
   schoolYear: string;
-  status: "validated" | "not_validated";
-  date: any; // Firestore Timestamp or Date
-  validatedBy: string | null;
+  status: "validated" | "not_validated" | "accepted" | "rejected";
+  date: any;
+  // "validated" uses validatedBy (from QR scan API)
+  validatedBy?: string | null;
+  // "accepted" and "rejected" use reviewedBy (from accept/reject APIs)
+  reviewedBy?: string | null;
+  // "rejected" includes the rejection reason
+  remarks?: string | null;
 }
 
 // ── Helpers ───────────────────────────────────────────────────────────────────
 function formatDate(val: any): string {
   if (!val) return "—";
-  // Firestore Timestamp
   if (val?.toDate) return val.toDate().toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
-  // ISO string or Date
   const d = new Date(val);
   return isNaN(d.getTime()) ? "—" : d.toLocaleDateString("en-US", { year: "numeric", month: "long", day: "numeric" });
 }
+
+// ── Status config map ─────────────────────────────────────────────────────────
+const STATUS_CONFIG = {
+  validated: {
+    label: "Validated",
+    cardClass: "border-green-200 bg-green-50",
+    iconBg: "bg-green-100",
+    icon: <ShieldCheck className="w-4 h-4 text-green-600" />,
+    badgeClass: "bg-green-600 text-white border-0",
+    rightIcon: <CheckCircle2 className="w-5 h-5 text-green-500" />,
+  },
+  not_validated: {
+    label: "Not Validated",
+    cardClass: "border-red-100 bg-red-50/40",
+    iconBg: "bg-red-100",
+    icon: <ShieldX className="w-4 h-4 text-[#b32032]" />,
+    badgeClass: "bg-[#b32032] text-white border-0",
+    rightIcon: <XCircle className="w-5 h-5 text-[#b32032]" />,
+  },
+  accepted: {
+    label: "Request Accepted",
+    cardClass: "border-blue-200 bg-blue-50",
+    iconBg: "bg-blue-100",
+    icon: <FileCheck className="w-4 h-4 text-blue-600" />,
+    badgeClass: "bg-blue-600 text-white border-0",
+    rightIcon: <FileCheck className="w-5 h-5 text-blue-500" />,
+  },
+  rejected: {
+    label: "Request Rejected",
+    cardClass: "border-orange-200 bg-orange-50",
+    iconBg: "bg-orange-100",
+    icon: <FileX className="w-4 h-4 text-orange-600" />,
+    badgeClass: "bg-orange-500 text-white border-0",
+    rightIcon: <FileX className="w-5 h-5 text-orange-500" />,
+  },
+} as const;
 
 // ── Validation History Section ────────────────────────────────────────────────
 function ValidationHistorySection({ profileDocId }: { profileDocId: string }) {
@@ -84,24 +123,18 @@ function ValidationHistorySection({ profileDocId }: { profileDocId: string }) {
       ) : (
         <div className="space-y-3">
           {history.map((entry) => {
-            const isValidated = entry.status === "validated";
+            const config = STATUS_CONFIG[entry.status] ?? STATUS_CONFIG.not_validated;
+            // Resolve the reviewer name regardless of which field was used
+            const reviewer = entry.reviewedBy || entry.validatedBy || null;
+
             return (
               <div
                 key={entry.id}
-                className={`flex items-start gap-4 rounded-lg border px-4 py-3 transition-colors ${
-                  isValidated
-                    ? "border-green-200 bg-green-50"
-                    : "border-red-100 bg-red-50/40"
-                }`}
+                className={`flex items-start gap-4 rounded-lg border px-4 py-3 transition-colors ${config.cardClass}`}
               >
                 {/* Icon */}
-                <div className={`mt-0.5 flex-shrink-0 rounded-full p-1.5 ${
-                  isValidated ? "bg-green-100" : "bg-red-100"
-                }`}>
-                  {isValidated
-                    ? <ShieldCheck className="w-4 h-4 text-green-600" />
-                    : <ShieldX className="w-4 h-4 text-[#b32032]" />
-                  }
+                <div className={`mt-0.5 flex-shrink-0 rounded-full p-1.5 ${config.iconBg}`}>
+                  {config.icon}
                 </div>
 
                 {/* Info */}
@@ -110,30 +143,32 @@ function ValidationHistorySection({ profileDocId }: { profileDocId: string }) {
                     <span className="text-sm font-semibold text-gray-800">
                       {entry.semester} Semester — {entry.schoolYear}
                     </span>
-                    <Badge
-                      className={`text-xs px-2 py-0.5 font-semibold ${
-                        isValidated
-                          ? "bg-green-600 text-white border-0"
-                          : "bg-[#b32032] text-white border-0"
-                      }`}
-                    >
-                      {isValidated ? "Validated" : "Not Validated"}
+                    <Badge className={`text-xs px-2 py-0.5 font-semibold ${config.badgeClass}`}>
+                      {config.label}
                     </Badge>
                   </div>
+
                   <div className="text-xs text-gray-500 flex flex-wrap gap-x-4 gap-y-0.5">
                     <span>{formatDate(entry.date)}</span>
-                    {isValidated && entry.validatedBy && (
-                      <span>Validated by: <span className="font-medium text-gray-700">{entry.validatedBy}</span></span>
+                    {reviewer && (
+                      <span>
+                        {entry.status === "validated" ? "Validated by" : "Reviewed by"}:{" "}
+                        <span className="font-medium text-gray-700">{reviewer}</span>
+                      </span>
                     )}
                   </div>
+
+                  {/* Rejection remarks */}
+                  {entry.status === "rejected" && entry.remarks && (
+                    <div className="mt-1.5 text-xs text-orange-700 bg-orange-100 rounded px-2 py-1 inline-block">
+                      Reason: {entry.remarks}
+                    </div>
+                  )}
                 </div>
 
                 {/* Status icon on the right (desktop) */}
                 <div className="hidden sm:flex flex-shrink-0 items-center self-center">
-                  {isValidated
-                    ? <CheckCircle2 className="w-5 h-5 text-green-500" />
-                    : <XCircle className="w-5 h-5 text-[#b32032]" />
-                  }
+                  {config.rightIcon}
                 </div>
               </div>
             );

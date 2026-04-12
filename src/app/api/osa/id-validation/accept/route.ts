@@ -131,7 +131,6 @@ export async function POST(req: Request) {
     const scheduleResult = await assignClaimSchedule()
 
     if (!scheduleResult.success) {
-      // Return the specific error reason so the dialog can show the right message
       return NextResponse.json(
         { error: "no_claim_slots", detail: scheduleResult.error },
         { status: 409 }
@@ -157,6 +156,13 @@ export async function POST(req: Request) {
 
     const expirationDate = calculateExpirationDate(QR_EXPIRATION_DAYS)
     const now = new Date()
+
+    // 📖 Fetch current semester for history entry
+    const semesterSnap = await adminDB
+      .collection("system_settings")
+      .doc("currentSemester")
+      .get()
+    const currentSemester = semesterSnap.exists ? semesterSnap.data() : null
 
     // 🚀 Batch writes
     const batch = adminDB.batch()
@@ -192,7 +198,21 @@ export async function POST(req: Request) {
       },
     })
 
-    // ✅ isValidated is NOT set here — only set after QR scan confirmation
+    // ✅ Write validation history — request accepted, awaiting QR scan
+    const historyRef = adminDB
+      .collection("student_profiles")
+      .doc(studentId)
+      .collection("validation_history")
+      .doc()
+
+    batch.set(historyRef, {
+      semester: currentSemester?.semester ?? "",
+      schoolYear: currentSemester?.schoolYear ?? "",
+      status: "accepted",
+      date: FieldValue.serverTimestamp(),
+      reviewedBy: adminName,
+      remarks: null,
+    })
 
     const validationRules = [
       "Save or print this email containing your QR code",

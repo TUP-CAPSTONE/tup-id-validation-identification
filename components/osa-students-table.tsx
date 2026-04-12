@@ -97,7 +97,11 @@ function ValidationHistoryDialog({
         // student_profiles doc ID = Firebase Auth UID (student.uid)
         const histRef = collection(db, "student_profiles", student!.uid, "validation_history");
         const snap = await getDocs(query(histRef, orderBy("date", "desc")));
-        setHistory(snap.docs.map(d => ({ id: d.id, ...(d.data() as Omit<ValidationHistoryEntry, "id">) })));
+        setHistory(
+          snap.docs
+            .map(d => ({ id: d.id, ...(d.data() as Omit<ValidationHistoryEntry, "id">) }))
+            .filter(entry => !("reviewedBy" in entry))
+        );
       } catch (err) {
         console.error("Failed to fetch validation history:", err);
         toast.error("Failed to load validation history.");

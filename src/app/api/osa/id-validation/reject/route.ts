@@ -4,7 +4,6 @@ import { cookies } from "next/headers"
 import { FieldValue } from "firebase-admin/firestore"
 import { buildRejectionEmailHTML } from "@/lib/email-templates/validation-rejection-email"
 
-// Optional: Import rate limiting only if Upstash is configured
 let rateLimiters: any = null
 let checkRateLimit: any = null
 let createRateLimitHeaders: any = null
@@ -54,7 +53,6 @@ export async function POST(req: Request) {
       return NextResponse.json({ error: "Authentication failed" }, { status: 401 })
     }
 
-
     // 📄 Fetch validation request
     const requestRef = adminDB.collection("validation_requests2").doc(requestId)
     const requestSnap = await requestRef.get()
@@ -75,7 +73,6 @@ export async function POST(req: Request) {
       )
     }
 
-    // Try multiple field names for student ID and TUP ID
     const studentId = requestData.studentId || requestData.studentNumber || requestData.tup_id || requestData.student_id
     const tupId = requestData.tupId || requestData.tup_id || requestData.studentNumber || studentId
     const studentName = requestData.studentName || requestData.name || "Student"
@@ -91,6 +88,13 @@ export async function POST(req: Request) {
 
     console.log("👤 Student ID:", studentId, "TUP ID:", tupId)
 
+    // 📖 Fetch current semester for history entry
+    const semesterSnap = await adminDB
+      .collection("system_settings")
+      .doc("currentSemester")
+      .get()
+    const currentSemester = semesterSnap.exists ? semesterSnap.data() : null
+
     const now = new Date()
 
     // 🚀 Batch writes
@@ -105,11 +109,8 @@ export async function POST(req: Request) {
     })
 
     // 📋 Copy student info to rejected_validation collection (without images)
-    // Auto-generate document ID for multiple rejection history
     const rejectedRef = adminDB.collection("rejected_validation").doc()
-    
     batch.set(rejectedRef, {
-      // Student Information (no images)
       studentId: studentId || null,
       tupId: tupId || null,
       studentName: studentName || null,
@@ -118,23 +119,32 @@ export async function POST(req: Request) {
       course: requestData.course || null,
       section: requestData.section || null,
       yearLevel: requestData.yearLevel || requestData.year || null,
-      
-      // Rejection Details
       rejectRemarks,
       rejectedAt: now,
       rejectedBy: reviewerName,
-      
-      // Reference to original request
       originalRequestId: requestId,
       requestTime: requestData.requestTime || null,
-      
-      // Metadata
       createdAt: now,
     })
 
-    // 📧 Trigger rejection email via Firebase Extension
+    // ✅ Write validation history — request rejected
+    const historyRef = adminDB
+      .collection("student_profiles")
+      .doc(studentId)
+      .collection("validation_history")
+      .doc()
+
+    batch.set(historyRef, {
+      semester: currentSemester?.semester ?? "",
+      schoolYear: currentSemester?.schoolYear ?? "",
+      status: "rejected",
+      date: FieldValue.serverTimestamp(),
+      reviewedBy: reviewerName,
+      remarks: rejectRemarks,
+    })
+
+    // 📧 Trigger rejection email
     if (studentEmail) {
-      // Format rejection date
       const rejectedAtFormatted = now.toLocaleDateString("en-US", {
         year: "numeric",
         month: "long",
@@ -143,16 +153,14 @@ export async function POST(req: Request) {
         minute: "2-digit",
       })
 
-      // Build email HTML - use TUP ID for display
       const emailHTML = buildRejectionEmailHTML({
         studentName,
-        studentId: tupId, // Use TUP ID for display in email
+        studentId: tupId,
         rejectRemarks,
         rejectedBy: reviewerName,
         rejectedAt: rejectedAtFormatted,
       })
 
-      // Add email to Firebase mail collection (will be picked up by extension)
       const mailRef = adminDB.collection("mail").doc()
       batch.set(mailRef, {
         to: studentEmail,
@@ -169,11 +177,11 @@ export async function POST(req: Request) {
 
     console.log("💾 Committing batch write...")
     await batch.commit()
-    console.log("✅ Rejection processed, saved to rejected_validation, and email queued")
+    console.log("✅ Rejection processed, history written, email queued")
 
-    return NextResponse.json({ 
+    return NextResponse.json({
       success: true,
-      rejectedDocId: rejectedRef.id
+      rejectedDocId: rejectedRef.id,
     }, {
       status: 200,
     })
@@ -186,4 +194,4 @@ export async function POST(req: Request) {
       { status: 500 }
     )
   }
-}
+} 

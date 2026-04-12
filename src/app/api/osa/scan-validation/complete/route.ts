@@ -115,6 +115,13 @@ export async function POST(req: Request) {
       )
     }
 
+    // 📖 Fetch current semester for history entry
+    const semesterSnap = await adminDB
+      .collection("system_settings")
+      .doc("currentSemester")
+      .get()
+    const currentSemester = semesterSnap.exists ? semesterSnap.data() : null
+
     const now = new Date()
 
     // 🚀 Batch update
@@ -126,7 +133,7 @@ export async function POST(req: Request) {
       isValidated: true,
       validatedAt: FieldValue.serverTimestamp(),
       validatedBy: osaName,
-      validatedByRole: "osa", // Always OSA for QR scanning
+      validatedByRole: "osa",
     })
 
     // Mark QR code as used
@@ -134,17 +141,33 @@ export async function POST(req: Request) {
       isUsed: true,
       usedAt: FieldValue.serverTimestamp(),
       usedBy: osaName,
-      usedByRole: "osa", // Always OSA for QR scanning
+      usedByRole: "osa",
     })
 
-    // Create validation log (optional but recommended for audit trail)
+    // Create validation log
     batch.set(adminDB.collection("validation_logs").doc(), {
       studentId,
       qrCodeId,
       validatedBy: osaName,
-      validatedByRole: "osa", // Always OSA for QR scanning
+      validatedByRole: "osa",
       validatedAt: now,
       method: "qr_scan",
+    })
+
+    // ✅ Write validation history — physically validated via QR scan
+    const historyRef = adminDB
+      .collection("student_profiles")
+      .doc(studentId)
+      .collection("validation_history")
+      .doc()
+
+    batch.set(historyRef, {
+      semester: currentSemester?.semester ?? "",
+      schoolYear: currentSemester?.schoolYear ?? "",
+      status: "validated",
+      date: FieldValue.serverTimestamp(),
+      validatedBy: osaName,
+      remarks: null,
     })
 
     await batch.commit()
