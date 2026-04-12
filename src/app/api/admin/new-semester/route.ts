@@ -152,29 +152,32 @@ export async function POST(req: NextRequest) {
       const uid = studentDoc.id
       const studentData = studentDoc.data()
 
-      // a) Write validation history entry based on current isValidated value
-      //    Only write if there was actually a previous semester to record
+      // a) Only write history for students who were NOT validated
       if (hasPreviousSemester) {
         const wasValidated = studentData.isValidated === true
 
-        const historyRef = adminDB
-          .collection("student_profiles")
-          .doc(uid)
-          .collection("validation_history")
-          .doc()
+        if (!wasValidated) {
+          const historyRef = adminDB
+            .collection("student_profiles")
+            .doc(uid)
+            .collection("validation_history")
+            .doc()
 
-        batch.set(historyRef, {
-          semester: prevSemester,
-          schoolYear: prevSchoolYear,
-          status: wasValidated ? "validated" : "not_validated",
-          date: now,
-          validatedBy: wasValidated ? (studentData.lastValidatedBy ?? null) : null,
-        })
+          batch.set(historyRef, {
+            semester: prevSemester,
+            schoolYear: prevSchoolYear,
+            status: "not_validated",
+            date: now,
+            validatedBy: null,
+          })
 
-        opsInBatch++
-        wasValidated ? validatedCount++ : notValidatedCount++
+          opsInBatch++
+          notValidatedCount++
 
-        await flushIfNeeded()
+          await flushIfNeeded()
+        } else {
+          validatedCount++ // still count them, just don't write
+        }
       }
 
       // b) Reset isValidated to false for the incoming semester
