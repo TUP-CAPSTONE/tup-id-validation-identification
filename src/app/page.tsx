@@ -470,7 +470,7 @@ export default function Home() {
                 animate={{ opacity: 1, y: 0 }}
                 transition={{ delay: 0.55, duration: 0.7 }}
               >
-                A student information and identification validation system designed
+                A student identification and ID validation system designed
                 for a faster, smarter, and more secure campus experience.
               </motion.p>
 
@@ -553,9 +553,9 @@ export default function Home() {
                   viewport={{ once: true }} transition={{ delay: 0.1, duration: 0.65 }}
                   className="text-base sm:text-lg md:text-xl leading-[1.8] sm:leading-[1.85] text-zinc-300"
                 >
-                  TUP-SIIVS (Student Information and Identification Validation
+                  TUP-SIIVS (Student Identification and ID Validation
                   System) is a digital platform developed to streamline student
-                  verification and campus entry processes. The system enhances
+                  ID validation and campus entry verification processes. The system enhances
                   campus security by validating student identities through modern
                   authentication methods while maintaining an organized student
                   information database.
@@ -614,12 +614,12 @@ export default function Home() {
               />
 
               <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4 sm:gap-6">
-                <FeatureCard delay={0}   icon="🔐" title="Secure Identity Validation" description="Real-time student identity verification using modern authentication to prevent unauthorized campus access." />
-                <FeatureCard delay={0.1} icon="📋" title="Student Information System" description="Centralized, organized database of student records accessible to authorized faculty and administrators." />
-                <FeatureCard delay={0.2} icon="⚡" title="Instant Processing"         description="Sub-second validation responses ensure smooth campus entry without creating bottlenecks or queues." />
-                <FeatureCard delay={0.3} icon="📊" title="Analytics Dashboard"        description="Comprehensive insights into campus traffic, entry patterns, and student activity for administrators." />
-                <FeatureCard delay={0.4} icon="📱" title="Mobile-Ready Interface"     description="Fully responsive design that works seamlessly across all devices — desktops, tablets, and phones." />
-                <FeatureCard delay={0.5} icon="🛡️" title="Privacy & Compliance"       description="Built with data privacy standards in mind, protecting sensitive student information at every level." />
+                <FeatureCard delay={0}   icon="🔐" title="Student Identity Verification"        description="Real-time identification and ID validation system designed to ensure that only legitimate TUP Manila students are granted access within the campus." />
+                <FeatureCard delay={0.1} icon="📋" title="Student Information Management"       description="A platform for storing and managing student records, allowing authorized personnel to efficiently access and monitor student data." />
+                <FeatureCard delay={0.2} icon="⚡" title="Instant Processing"                   description="Sub-second validation responses ensure smooth campus entry without creating bottlenecks or queues." />
+                <FeatureCard delay={0.3} icon="👁️" title="Facial Recognition Integration"       description="Incorporates biometric technology to strengthen identity verification and improve accuracy compared to traditional methods." />
+                <FeatureCard delay={0.4} icon="📱" title="Mobile-Ready Interface"               description="Fully responsive design that works seamlessly across all devices — desktops, tablets, and phones." />
+                <FeatureCard delay={0.5} icon="🛡️" title="Privacy & Compliance"                 description="Built with data privacy standards in mind, protecting sensitive student information at every level." />
               </div>
             </section>
 
