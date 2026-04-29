@@ -67,7 +67,13 @@ export async function GET(request: NextRequest) {
 
     if (validationQuery.empty) {
       return NextResponse.json(
-        { success: true, message: "No validation request found", data: null },
+        { 
+          success: true, 
+          message: "No validation request found", 
+          data: null,
+          currentSemester,
+          currentSchoolYear
+        },
         { status: 200, headers: createRateLimitHeaders(rateLimitResult) }
       );
     }
@@ -75,26 +81,37 @@ export async function GET(request: NextRequest) {
     const requestDoc = validationQuery.docs[0];
     const requestData = requestDoc.data();
 
-    // ── If accepted, check if it belongs to the current semester ─────────────
-    if (requestData.status === "accepted") {
-      const isSameSemester =
-        requestData.semester === currentSemester &&
-        requestData.schoolYear === currentSchoolYear;
+    // ── Check if request belongs to the current semester ─────────────────────
+    const isSameSemester =
+      requestData.semester === currentSemester &&
+      requestData.schoolYear === currentSchoolYear;
 
-      if (!isSameSemester) {
-        // Accepted but from a previous semester — treat as no request for this semester
-        return NextResponse.json(
-          { success: true, message: "No validation request found", data: null },
-          { status: 200, headers: createRateLimitHeaders(rateLimitResult) }
-        );
-      }
+    if (!isSameSemester) {
+      // Request is from a previous semester — treat as no request for this semester
+      return NextResponse.json(
+        { 
+          success: true, 
+          message: "No validation request found for current semester", 
+          data: null,
+          currentSemester,
+          currentSchoolYear
+        },
+        { status: 200, headers: createRateLimitHeaders(rateLimitResult) }
+      );
+    }
+
+    // ── If accepted, verify it's still valid ─────────────────────────────────
+    if (requestData.status === "accepted") {
+      // Accepted request for current semester is valid
     }
 
     return NextResponse.json(
       {
         success: true,
         message: "Validation request found",
-        data: { id: requestDoc.id, ...requestData }
+        data: { id: requestDoc.id, ...requestData },
+        currentSemester,
+        currentSchoolYear
       },
       { status: 200, headers: createRateLimitHeaders(rateLimitResult) }
     );

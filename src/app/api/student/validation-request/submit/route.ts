@@ -3,14 +3,44 @@ import { adminAuth, adminDB } from "@/lib/firebaseAdmin";
 import { rateLimiters, checkRateLimit, createRateLimitHeaders } from "@/lib/rate-limit";
 import { FieldValue } from "firebase-admin/firestore";
 
+// Module-level semester cache (lives for the lifetime of the serverless instance)
+let semesterCache: {
+  data: { semester: string; schoolYear: string };
+  fetchedAt: number;
+} | null = null;
+
+const SEMESTER_CACHE_TTL_MS = 5 * 60 * 1000; // 5 minutes
+
+async function getCachedSemester() {
+  const now = Date.now();
+  if (semesterCache && now - semesterCache.fetchedAt < SEMESTER_CACHE_TTL_MS) {
+    console.log("📅 Using cached semester data");
+    return semesterCache.data;
+  }
+
+  const semesterSnap = await adminDB
+    .collection("system_settings")
+    .doc("currentSemester")
+    .get();
+
+  if (!semesterSnap.exists) return null;
+
+  const semesterData = semesterSnap.data()!;
+  const { semester, schoolYear } = semesterData;
+  if (!semester || !schoolYear) return null;
+
+  semesterCache = { data: { semester, schoolYear }, fetchedAt: now };
+  return semesterCache.data;
+}
+
 export async function POST(request: NextRequest) {
   try {
     console.log("=== Starting validation request submission ===");
 
-    // ── Auth ─────────────────────────────────────────────────────────────────
+    // ── Auth ──────────────────────────────────────────────────────────────────
     const authHeader = request.headers.get("authorization");
 
-    if (!authHeader || !authHeader.startsWith("Bearer ")) {
+    if (!authHeader?.startsWith("Bearer ")) {
       return NextResponse.json(
         { success: false, error: "Unauthorized - Missing token" },
         { status: 401 }
@@ -32,6 +62,9 @@ export async function POST(request: NextRequest) {
 
     const uid = decodedToken.uid;
     console.log(`✓ Authenticated user: ${uid}`);
+
+    // ── Parse body early (no need to wait) ───────────────────────────────────
+    const bodyPromise = request.json();
 
     // ── Rate limiting ─────────────────────────────────────────────────────────
     const rateLimitResult = await checkRateLimit(
@@ -55,14 +88,17 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // ── Fetch current semester (required) ────────────────────────────────────
-    const semesterSnap = await adminDB
-      .collection("system_settings")
-      .doc("currentSemester")
-      .get();
+    // ── Parallel: semester cache + existing request check ─────────────────────
+    const validationRequestsRef = adminDB.collection("validation_requests2");
 
-    if (!semesterSnap.exists) {
-      console.error("❌ No current semester set in system_settings/currentSemester");
+    const [semesterData, existingQuery, body] = await Promise.all([
+      getCachedSemester(),
+      validationRequestsRef.where("studentId", "==", uid).limit(1).get(),
+      bodyPromise,
+    ]);
+
+    // ── Semester validation ───────────────────────────────────────────────────
+    if (!semesterData) {
       return NextResponse.json(
         {
           success: false,
@@ -72,25 +108,10 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    const semesterData = semesterSnap.data()!;
-    const currentSemester: string = semesterData.semester;
-    const currentSchoolYear: string = semesterData.schoolYear;
-
-    if (!currentSemester || !currentSchoolYear) {
-      console.error("❌ Semester document exists but fields are missing:", semesterData);
-      return NextResponse.json(
-        {
-          success: false,
-          error: "Semester configuration is incomplete. Please contact the admin.",
-        },
-        { status: 400, headers: createRateLimitHeaders(rateLimitResult) }
-      );
-    }
-
+    const { semester: currentSemester, schoolYear: currentSchoolYear } = semesterData;
     console.log(`📅 Current semester: ${currentSemester} | ${currentSchoolYear}`);
 
-    // ── Parse body ────────────────────────────────────────────────────────────
-    const body = await request.json();
+    // ── Field validation ──────────────────────────────────────────────────────
     const {
       studentNumber,
       studentName,
@@ -107,7 +128,6 @@ export async function POST(request: NextRequest) {
       faceRightUrl,
     } = body;
 
-    // ── Field validation ──────────────────────────────────────────────────────
     if (!studentNumber || !studentName || !college || !email || !course || !section || !yearLevel) {
       return NextResponse.json(
         { success: false, error: "Missing required fields" },
@@ -122,7 +142,6 @@ export async function POST(request: NextRequest) {
       );
     }
 
-    // Verify all URLs are valid Firebase Storage URLs
     const storageUrlPattern = /^https:\/\/firebasestorage\.googleapis\.com\//;
     const urls = [corUrl, idPhotoUrl, faceFrontUrl, faceLeftUrl, faceRightUrl];
 
@@ -143,12 +162,6 @@ export async function POST(request: NextRequest) {
     });
 
     // ── Check existing request ────────────────────────────────────────────────
-    const validationRequestsRef = adminDB.collection("validation_requests2");
-    const existingQuery = await validationRequestsRef
-      .where("studentId", "==", uid)
-      .limit(1)
-      .get();
-
     if (!existingQuery.empty) {
       const existingRequest = existingQuery.docs[0].data();
 
@@ -158,7 +171,6 @@ export async function POST(request: NextRequest) {
           existingRequest.schoolYear === currentSchoolYear;
 
         if (isSameSemester) {
-          // Already validated this semester — block it
           console.log(`⚠️ Student ${studentNumber} already validated for this semester`);
           return NextResponse.json(
             {
@@ -169,7 +181,6 @@ export async function POST(request: NextRequest) {
           );
         }
 
-        // Accepted but from a previous semester — allow a fresh submission
         console.log(`ℹ️ Student ${studentNumber} was accepted in a previous semester. Allowing new request.`);
       } else {
         console.log(`ℹ️ Found existing request for ${studentNumber} with status: ${existingRequest.status}`);
@@ -209,11 +220,9 @@ export async function POST(request: NextRequest) {
 
     let requestDocRef;
     if (hasExistingDoc && existingStatus === "rejected") {
-      // Rejected — overwrite the same doc so history isn't duplicated
       requestDocRef = existingQuery.docs[0].ref;
       await requestDocRef.set(requestData);
     } else {
-      // New student or returning student from a previous semester — fresh doc
       requestDocRef = adminDB.collection("validation_requests2").doc();
       await requestDocRef.set(requestData);
     }

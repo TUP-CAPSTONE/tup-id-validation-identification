@@ -54,6 +54,12 @@ export default function StudentValidationRequest() {
   const [activeOffenses, setActiveOffenses] = useState<any[]>([]);
   const [offenseLoading, setOffenseLoading] = useState(true);
 
+  // Current semester state
+  const [currentSemester, setCurrentSemester] = useState<{
+    semester: string;
+    schoolYear: string;
+  } | null>(null);
+
   const MAX_COR_SIZE_BYTES = 10 * 1024 * 1024; // 10MB
   const MAX_COR_SIZE_LABEL = "10MB";
 
@@ -176,6 +182,21 @@ export default function StudentValidationRequest() {
     }
   };
 
+  /**
+   * Check if existing request is for the current semester
+   * Returns true only if the request's semester matches the current semester
+   */
+  const isRequestForCurrentSemester = (): boolean => {
+    if (!existingRequest || !currentSemester) {
+      return true; // Allow if we can't determine (safer to not block)
+    }
+    
+    return (
+      existingRequest.semester === currentSemester.semester &&
+      existingRequest.schoolYear === currentSemester.schoolYear
+    );
+  };
+
   const fetchData = async (token: string, uid: string) => {
     try {
       const profileResponse = await fetch('/api/student/profile', {
@@ -203,8 +224,14 @@ export default function StudentValidationRequest() {
 
       if (statusResponse.ok) {
         const statusResult = await statusResponse.json();
-        if (statusResult.success && statusResult.data) {
-          setExistingRequest(statusResult.data);
+        setExistingRequest(statusResult.data ?? null);
+        
+        // ✅ Extract current semester from response
+        if (statusResult.currentSemester && statusResult.currentSchoolYear) {
+          setCurrentSemester({
+            semester: statusResult.currentSemester,
+            schoolYear: statusResult.currentSchoolYear,
+          });
         }
       }
     } catch (err) {
@@ -757,7 +784,40 @@ export default function StudentValidationRequest() {
       </div>
     );
   }
+  
+    // ── Block form if there's a pending request ──────────────────────────────
+  if (existingRequest && existingRequest.status === "pending" && !success) {
+    return (
+      <div className="w-full max-w-6xl space-y-6">
+        <Button
+          variant="outline"
+          onClick={goBackToDashboard}
+          className="flex items-center gap-2 border-red-200 hover:bg-red-50"
+        >
+          <ArrowLeft className="w-4 h-4" />
+          Back to Dashboard
+        </Button>
 
+        <Card className="border-yellow-200 bg-yellow-50">
+          <CardHeader>
+            <CardTitle className="text-yellow-800">⏳ Request Pending</CardTitle>
+            <CardDescription>Your validation request is currently being reviewed.</CardDescription>
+          </CardHeader>
+          <CardContent>
+            <p className="text-yellow-700">
+              Please wait for the OSA to review your request. You will be notified via email once a decision has been made.
+            </p>
+          </CardContent>
+        </Card>
+      </div>
+    );
+  }
+
+  // ── Block resubmit form for non-rejected statuses ─────────────────────────
+  if (showResubmitForm && existingRequest?.status !== "rejected") {
+    setShowResubmitForm(false);
+    return null;
+  }
   const allCaptured = corFilePreview && idPhoto && faceFront && faceLeft && faceRight && course.trim() && section.trim() && yearLevel.trim();
 
   return (
