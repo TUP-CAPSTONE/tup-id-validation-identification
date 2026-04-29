@@ -142,7 +142,7 @@ export async function POST(request: NextRequest) {
       yearLevel,
     });
 
-    // ── Check if already accepted ─────────────────────────────────────────────
+    // ── Check existing request ────────────────────────────────────────────────
     const validationRequestsRef = adminDB.collection("validation_requests2");
     const existingQuery = await validationRequestsRef
       .where("studentId", "==", uid)
@@ -151,20 +151,32 @@ export async function POST(request: NextRequest) {
 
     if (!existingQuery.empty) {
       const existingRequest = existingQuery.docs[0].data();
+
       if (existingRequest.status === "accepted") {
-        console.log(`⚠️ Student ${studentNumber} already validated`);
-        return NextResponse.json(
-          {
-            success: false,
-            error: "You have already been validated. You cannot submit another request.",
-          },
-          { status: 400, headers: createRateLimitHeaders(rateLimitResult) }
-        );
+        const isSameSemester =
+          existingRequest.semester === currentSemester &&
+          existingRequest.schoolYear === currentSchoolYear;
+
+        if (isSameSemester) {
+          // Already validated this semester — block it
+          console.log(`⚠️ Student ${studentNumber} already validated for this semester`);
+          return NextResponse.json(
+            {
+              success: false,
+              error: "You have already been validated for this semester. You cannot submit another request.",
+            },
+            { status: 400, headers: createRateLimitHeaders(rateLimitResult) }
+          );
+        }
+
+        // Accepted but from a previous semester — allow a fresh submission
+        console.log(`ℹ️ Student ${studentNumber} was accepted in a previous semester. Allowing new request.`);
+      } else {
+        console.log(`ℹ️ Found existing request for ${studentNumber} with status: ${existingRequest.status}`);
       }
-      console.log(`ℹ️ Found existing request for ${studentNumber} with status: ${existingRequest.status}`);
     }
 
-    // ── Save request ──────────────────────────────────────────────────────────
+    // ── Build request data ────────────────────────────────────────────────────
     const requestData = {
       studentId: uid,
       tupId: studentNumber,
@@ -182,7 +194,6 @@ export async function POST(request: NextRequest) {
         left: faceLeftUrl,
         back: faceRightUrl,
       },
-      // 📅 Semester snapshot at time of request
       semester: currentSemester,
       schoolYear: currentSchoolYear,
       status: "pending",
@@ -190,11 +201,23 @@ export async function POST(request: NextRequest) {
       rejectRemarks: null,
     };
 
+    // ── Save request ──────────────────────────────────────────────────────────
     console.log("\n💾 Saving to Firestore...");
-    const requestDocRef = adminDB
-      .collection("validation_requests2")
-      .doc(studentNumber);
-    await requestDocRef.set(requestData, { merge: true });
+
+    const hasExistingDoc = !existingQuery.empty;
+    const existingStatus = hasExistingDoc ? existingQuery.docs[0].data().status : null;
+
+    let requestDocRef;
+    if (hasExistingDoc && existingStatus === "rejected") {
+      // Rejected — overwrite the same doc so history isn't duplicated
+      requestDocRef = existingQuery.docs[0].ref;
+      await requestDocRef.set(requestData);
+    } else {
+      // New student or returning student from a previous semester — fresh doc
+      requestDocRef = adminDB.collection("validation_requests2").doc();
+      await requestDocRef.set(requestData);
+    }
+
     console.log("✅ Saved to Firestore successfully");
     console.log("=== Validation request submission complete ===\n");
 
