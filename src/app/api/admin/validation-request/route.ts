@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from "next/server";
-import { adminAuth } from "@/lib/firebaseAdmin";
+import { adminAuth, adminDB } from "@/lib/firebaseAdmin";
 import { cookies } from "next/headers";
 import {
   getFirestore,
@@ -45,7 +45,6 @@ export async function GET(request: NextRequest) {
     if (decodedToken.role === "admin") {
       isAdmin = true;
     } else {
-      const { adminDB } = await import("@/lib/firebaseAdmin");
       const userSnap = await adminDB
         .collection("users")
         .doc(decodedToken.uid)
@@ -83,6 +82,30 @@ export async function GET(request: NextRequest) {
       );
     }
 
+    // ── Fetch current semester (required) ─────────────────────────────
+    const semesterSnap = await adminDB
+      .collection("system_settings")
+      .doc("currentSemester")
+      .get();
+
+    if (!semesterSnap.exists) {
+      return NextResponse.json(
+        { error: "No semester configured. Please contact the admin." },
+        { status: 400, headers: createRateLimitHeaders(rateLimit) }
+      );
+    }
+
+    const semesterData = semesterSnap.data()!;
+    const currentSemester: string = semesterData.semester;
+    const currentSchoolYear: string = semesterData.schoolYear;
+
+    if (!currentSemester || !currentSchoolYear) {
+      return NextResponse.json(
+        { error: "Semester configuration is incomplete." },
+        { status: 400, headers: createRateLimitHeaders(rateLimit) }
+      );
+    }
+
     // ── Query params ───────────────────────────────────────────────────
     const searchParams = request.nextUrl.searchParams;
     const pageSize = parseInt(searchParams.get("pageSize") || "10");
@@ -102,10 +125,9 @@ export async function GET(request: NextRequest) {
     const collectionRef = collection(db, "validation_requests2");
     const queryConstraints: any[] = [];
 
-    // Only show requests after bucket migration
-    const migrationDate = new Date("2025-02-08");
-    const migrationTimestamp = Timestamp.fromDate(migrationDate);
-    queryConstraints.push(where("requestTime", ">=", migrationTimestamp));
+    // Filter by current semester only
+    queryConstraints.push(where("semester", "==", currentSemester));
+    queryConstraints.push(where("schoolYear", "==", currentSchoolYear));
 
     if (
       statusFilter &&
@@ -151,6 +173,8 @@ export async function GET(request: NextRequest) {
         status: docData.status,
         rejectRemarks: docData.rejectRemarks,
         requestTime: docData.requestTime?.toDate().toISOString() || "",
+        semester: docData.semester,
+        schoolYear: docData.schoolYear,
       };
     });
 
@@ -190,6 +214,8 @@ export async function GET(request: NextRequest) {
         hasMore,
         lastRequestId: lastDoc?.id || null,
         totalFetched: requests.length,
+        semester: currentSemester,
+        schoolYear: currentSchoolYear,
       },
       {
         status: 200,
