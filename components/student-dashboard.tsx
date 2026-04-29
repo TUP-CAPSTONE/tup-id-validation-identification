@@ -23,7 +23,7 @@ export default function StudentDashboard() {
   const [schoolYear, setSchoolYear] = useState<string | null>(null);
   const [semester, setSemester] = useState<string | null>(null);
 
-  const fetchValidationStatus = async (uid: string) => {
+  const fetchValidationStatus = async (uid: string, schoolYearVal?: string, semesterVal?: string) => {
     try {
       const q = query(
         collection(db, "validation_requests2"),
@@ -37,7 +37,22 @@ export default function StudentDashboard() {
       }
 
       const docs = snap.docs.map((doc) => doc.data());
-      docs.sort((a, b) => {
+      
+      // ✅ Filter by current semester and school year
+      const currentYear = schoolYearVal || schoolYear;
+      const currentSem = semesterVal || semester;
+
+      const filteredDocs = docs.filter(doc => 
+        doc.schoolYear === currentYear && doc.semester === currentSem
+      );
+
+      if (filteredDocs.length === 0) {
+        setValidationStatus("not_submitted");
+        return;
+      }
+
+      // Sort by date (most recent first)
+      filteredDocs.sort((a, b) => {
         const aTime = a.requestTime?.seconds
           ? a.requestTime.seconds * 1000
           : a.requestTime?.toMillis
@@ -51,7 +66,7 @@ export default function StudentDashboard() {
         return bTime - aTime;
       });
 
-      const data = docs[0];
+      const data = filteredDocs[0];
       const status = data.status || "pending";
       if (status === "accepted") setValidationStatus("accepted");
       else if (status === "rejected") setValidationStatus("rejected");
@@ -103,10 +118,18 @@ export default function StudentDashboard() {
         return;
       }
       setUser(currentUser);
+      
+      // ✅ Fetch semester first, then validation status with semester data
+      await fetchCurrentSemester();
+      
+      // Get fresh semester data or use state
+      const docRef = doc(db, "system_settings", "currentSemester");
+      const docSnap = await getDoc(docRef);
+      const semesterData = docSnap.exists() ? docSnap.data() : null;
+      
       await Promise.all([
-        fetchValidationStatus(currentUser.uid),
+        fetchValidationStatus(currentUser.uid, semesterData?.schoolYear, semesterData?.semester),
         fetchActiveOffenses(currentUser.uid),
-        fetchCurrentSemester(),
       ]);
     } catch (err: any) {
       handleErrors(err);
