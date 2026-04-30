@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from "next/server";
-import { getFirestore, collection, query, orderBy, limit, startAfter, getDocs, getDoc, doc, where, Timestamp } from "firebase/firestore";
+import { adminDB } from "@/lib/firebaseAdmin";
+import { getFirestore, collection, query, orderBy, limit, startAfter, getDocs, getDoc, doc, where } from "firebase/firestore";
 import { app } from "@/lib/firebaseConfig";
 import { rateLimiters, checkRateLimit, createRateLimitHeaders } from "@/lib/rate-limit";
 
@@ -7,10 +8,8 @@ const db = getFirestore(app);
 
 export async function GET(request: NextRequest) {
   try {
-    // Get the client's IP address for rate limiting
     const ip = request.headers.get("x-forwarded-for") || request.headers.get("x-real-ip") || "anonymous";
 
-    // Check rate limit - using existing studentProfile limiter (20 requests per minute)
     const rateLimit = await checkRateLimit(
       rateLimiters.studentProfile,
       `validation-requests:${ip}`
@@ -29,15 +28,38 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Get query parameters
+    // ── Fetch current semester (required) ─────────────────────────────
+    const semesterSnap = await adminDB
+      .collection("system_settings")
+      .doc("currentSemester")
+      .get();
+
+    if (!semesterSnap.exists) {
+      return NextResponse.json(
+        { error: "No semester configured. Please contact the admin." },
+        { status: 400, headers: createRateLimitHeaders(rateLimit) }
+      );
+    }
+
+    const semesterData = semesterSnap.data()!;
+    const currentSemester: string = semesterData.semester;
+    const currentSchoolYear: string = semesterData.schoolYear;
+
+    if (!currentSemester || !currentSchoolYear) {
+      return NextResponse.json(
+        { error: "Semester configuration is incomplete." },
+        { status: 400, headers: createRateLimitHeaders(rateLimit) }
+      );
+    }
+
+    // ── Query params ───────────────────────────────────────────────────
     const searchParams = request.nextUrl.searchParams;
     const pageSize = parseInt(searchParams.get("pageSize") || "10");
     const lastRequestId = searchParams.get("lastRequestId");
-    const statusFilter = searchParams.get("status"); // 'pending', 'accepted', 'rejected', or null for all
-    const sortBy = searchParams.get("sortBy") || "requestTime"; // requestTime, studentName, yearLevel
-    const sortOrder = searchParams.get("sortOrder") || "desc"; // asc or desc
+    const statusFilter = searchParams.get("status");
+    const sortBy = searchParams.get("sortBy") || "requestTime";
+    const sortOrder = searchParams.get("sortOrder") || "desc";
 
-    // Validate page size
     if (pageSize > 100 || pageSize < 1) {
       return NextResponse.json(
         { error: "Page size must be between 1 and 100" },
@@ -45,53 +67,35 @@ export async function GET(request: NextRequest) {
       );
     }
 
-    // Build the query
-    let requestsQuery;
+    // ── Firestore query ────────────────────────────────────────────────
     const collectionRef = collection(db, "validation_requests2");
-
-    // Start building query constraints
     const queryConstraints: any[] = [];
 
-    // ⭐ MIGRATION DATE FILTER - Only show requests after bucket migration
-    // Change this date to when you migrated to the new storage bucket
-    const migrationDate = new Date("2025-02-08"); // ADJUST THIS DATE
-    const migrationTimestamp = Timestamp.fromDate(migrationDate);
-    
-    // Always filter by migration date to exclude requests with missing images
-    queryConstraints.push(where("requestTime", ">=", migrationTimestamp));
+    // Filter by current semester only
+    queryConstraints.push(where("semester", "==", currentSemester));
+    queryConstraints.push(where("schoolYear", "==", currentSchoolYear));
 
-    // IMPORTANT: Firebase requires composite indexes when combining where() + orderBy()
-    // To avoid creating many indexes, we'll fetch more data and filter client-side when status filter is active
-    
     if (statusFilter && ["pending", "accepted", "rejected"].includes(statusFilter)) {
-      // When filtering by status, add status filter
       queryConstraints.push(where("status", "==", statusFilter));
-      queryConstraints.push(limit(pageSize * 3)); // Fetch more to account for sorting
+      queryConstraints.push(limit(pageSize * 3));
     } else {
-      // No status filter - can use normal ordering
       queryConstraints.push(orderBy(sortBy, sortOrder as "asc" | "desc"));
-      
-      // Add pagination cursor if provided
+
       if (lastRequestId) {
         const lastDocRef = doc(db, "validation_requests2", lastRequestId);
         const lastDocSnap = await getDoc(lastDocRef);
-        
         if (lastDocSnap.exists()) {
           queryConstraints.push(startAfter(lastDocSnap));
         }
       }
-      
+
       queryConstraints.push(limit(pageSize));
     }
 
-    // Execute query
-    requestsQuery = query(collectionRef, ...queryConstraints);
-    const requestsSnapshot = await getDocs(requestsQuery);
+    const requestsSnapshot = await getDocs(query(collectionRef, ...queryConstraints));
 
-    // Map the data
     let requests = requestsSnapshot.docs.map((doc) => {
       const docData = doc.data();
-
       return {
         id: doc.id,
         requestId: doc.id,
@@ -109,14 +113,15 @@ export async function GET(request: NextRequest) {
         status: docData.status,
         rejectRemarks: docData.rejectRemarks,
         requestTime: docData.requestTime?.toDate().toISOString() || "",
+        semester: docData.semester,
+        schoolYear: docData.schoolYear,
       };
     });
 
-    // If status filter is active, sort in-memory
     if (statusFilter) {
       requests.sort((a, b) => {
-        let aVal, bVal;
-        
+        let aVal: any, bVal: any;
+
         if (sortBy === "requestTime") {
           aVal = new Date(a.requestTime).getTime();
           bVal = new Date(b.requestTime).getTime();
@@ -129,20 +134,16 @@ export async function GET(request: NextRequest) {
         } else {
           return 0;
         }
-        
-        if (sortOrder === "asc") {
-          return aVal > bVal ? 1 : -1;
-        } else {
-          return aVal < bVal ? 1 : -1;
-        }
+
+        return sortOrder === "asc" ? (aVal > bVal ? 1 : -1) : aVal < bVal ? 1 : -1;
       });
-      
-      // Apply pagination manually
-      const startIndex = lastRequestId ? requests.findIndex(r => r.id === lastRequestId) + 1 : 0;
+
+      const startIndex = lastRequestId
+        ? requests.findIndex((r) => r.id === lastRequestId) + 1
+        : 0;
       requests = requests.slice(startIndex, startIndex + pageSize);
     }
 
-    // Determine if there are more results
     const hasMore = requestsSnapshot.docs.length === pageSize;
     const lastDoc = requestsSnapshot.docs[requestsSnapshot.docs.length - 1];
 
@@ -152,6 +153,8 @@ export async function GET(request: NextRequest) {
         hasMore,
         lastRequestId: lastDoc?.id || null,
         totalFetched: requests.length,
+        semester: currentSemester,
+        schoolYear: currentSchoolYear,
       },
       {
         status: 200,
@@ -160,14 +163,10 @@ export async function GET(request: NextRequest) {
     );
   } catch (error) {
     console.error("Error fetching validation requests:", error);
-    console.error("Error details:", {
-      message: error instanceof Error ? error.message : "Unknown error",
-      stack: error instanceof Error ? error.stack : undefined,
-    });
     return NextResponse.json(
-      { 
+      {
         error: "Internal server error",
-        details: error instanceof Error ? error.message : "Unknown error"
+        details: error instanceof Error ? error.message : "Unknown error",
       },
       { status: 500 }
     );

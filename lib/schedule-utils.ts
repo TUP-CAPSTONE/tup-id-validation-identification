@@ -17,6 +17,7 @@ export interface ClaimSchedule {
 export type ClaimPeriodError =
   | { reason: "not_set" }
   | { reason: "expired"; endDate: string }
+  | { reason: "slots_full"; endDate: string }
 
 export interface AssignResult {
   success: true
@@ -36,6 +37,7 @@ const TIME_SLOTS: TimeSlot[] = [
 
 const MAX_PER_SLOT = 100
 
+// Monday (1) to Saturday (6)
 function isValidDay(date: Date): boolean {
   const day = date.getDay()
   return day >= 1 && day <= 6
@@ -46,6 +48,22 @@ function toDateKey(date: Date): string {
   const m = String(date.getMonth() + 1).padStart(2, "0")
   const d = String(date.getDate()).padStart(2, "0")
   return `${y}-${m}-${d}`
+}
+
+function getTodayKeyPHT(): string {
+  return new Date().toLocaleDateString("en-CA", {
+    timeZone: "Asia/Manila",
+  }) // returns "YYYY-MM-DD"
+}
+
+function getCurrentHourPHT(): number {
+  return parseInt(
+    new Date().toLocaleString("en-US", {
+      timeZone: "Asia/Manila",
+      hour: "numeric",
+      hour12: false,
+    })
+  )
 }
 
 export async function assignClaimSchedule(): Promise<AssignResult | AssignError> {
@@ -93,22 +111,25 @@ export async function assignClaimSchedule(): Promise<AssignResult | AssignError>
     }
   }
 
-  // Start from whichever is later: the configured startDate or today.
-  // No point iterating days that have already fully passed.
-  const todayMidnight = new Date(now)
-  todayMidnight.setHours(0, 0, 0, 0)
-  const cursor = new Date(Math.max(startDate.getTime(), todayMidnight.getTime()))
+  // ── Start from tomorrow (next day rule) ───────────────────────────────────
+  const tomorrowMidnight = new Date(now)
+  tomorrowMidnight.setDate(tomorrowMidnight.getDate() + 1)
+  tomorrowMidnight.setHours(0, 0, 0, 0)
+  const cursor = new Date(Math.max(startDate.getTime(), tomorrowMidnight.getTime()))
+
+  // ── PHT-aware helpers ─────────────────────────────────────────────────────
+  const todayKeyPHT = getTodayKeyPHT()
+  const currentHourPHT = getCurrentHourPHT()
 
   while (cursor <= endDate) {
     if (isValidDay(cursor)) {
       const dateKey = toDateKey(cursor)
 
-      // For today specifically, skip any time slot whose end hour has already passed.
-      // e.g. if it's 2PM, the 8AM–11AM slot is gone — skip it and only offer 1PM–4PM or 5PM–7PM.
-      const isToday = dateKey === toDateKey(now)
+      // Safety: if for any reason cursor lands on today, skip passed time slots
+      const isToday = dateKey === todayKeyPHT
 
       for (let slotIndex = 0; slotIndex < TIME_SLOTS.length; slotIndex++) {
-        if (isToday && now.getHours() >= TIME_SLOTS[slotIndex].endHour) continue
+        if (isToday && currentHourPHT >= TIME_SLOTS[slotIndex].endHour) continue
 
         const slotKey = `${dateKey}_slot${slotIndex}`
         const slotRef = adminDB.collection("sticker_claim_slots").doc(slotKey)
@@ -134,7 +155,13 @@ export async function assignClaimSchedule(): Promise<AssignResult | AssignError>
         })
 
         if (assigned) {
-          const slotDate = new Date(cursor)
+          // Use explicit constructor to avoid UTC offset shifting the date label
+          const slotDate = new Date(
+            cursor.getFullYear(),
+            cursor.getMonth(),
+            cursor.getDate()
+          )
+
           const dateLabel = slotDate.toLocaleDateString("en-US", {
             weekday: "long",
             year: "numeric",
@@ -162,7 +189,7 @@ export async function assignClaimSchedule(): Promise<AssignResult | AssignError>
   return {
     success: false,
     error: {
-      reason: "expired",
+      reason: "slots_full",
       endDate: endDate.toLocaleDateString("en-US", {
         year: "numeric",
         month: "long",
