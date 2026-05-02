@@ -50,8 +50,10 @@ export default function StudentValidationRequest() {
   const [success, setSuccess] = useState(false);
   
   // Offense blocking state
-  const [hasActiveOffense, setHasActiveOffense] = useState(false);
-  const [activeOffenses, setActiveOffenses] = useState<any[]>([]);
+  const [hasMajorOffense, setHasMajorOffense] = useState(false);
+  const [hasMinorOffense, setHasMinorOffense] = useState(false);
+  const [majorOffenses, setMajorOffenses] = useState<any[]>([]);
+  const [minorOffenses, setMinorOffenses] = useState<any[]>([]);
   const [offenseLoading, setOffenseLoading] = useState(true);
 
   // Current semester state
@@ -155,33 +157,28 @@ export default function StudentValidationRequest() {
     try {
       setOffenseLoading(true);
       const offensesRef = collection(db, "student_offenses");
-      const q = query(
-        offensesRef, 
-        where("studentUid", "==", uid),
-        where("status", "==", "active")
-      );
+      const q = query(offensesRef, where("studentUid", "==", uid), where("status", "==", "active"));
       const snapshot = await getDocs(q);
-      
-      if (!snapshot.empty) {
-        const offensesList: any[] = [];
-        snapshot.forEach((doc) => {
-          offensesList.push({ id: doc.id, ...doc.data() });
-        });
-        setActiveOffenses(offensesList);
-        setHasActiveOffense(true);
-      } else {
-        setActiveOffenses([]);
-        setHasActiveOffense(false);
-      }
+
+      const majors: any[] = [];
+      const minors: any[] = [];
+
+      snapshot.forEach((doc) => {
+        const data = { id: doc.id, ...doc.data() } as any;
+        if (data.offenseType === 'major') majors.push(data);
+        else minors.push(data);
+      });
+
+      setMajorOffenses(majors);
+      setMinorOffenses(minors);
+      setHasMajorOffense(majors.length > 0);
+      setHasMinorOffense(minors.length > 0);
     } catch (err) {
       console.error("Error checking offenses:", err);
-      setActiveOffenses([]);
-      setHasActiveOffense(false);
     } finally {
       setOffenseLoading(false);
     }
   };
-
   /**
    * Check if existing request is for the current semester
    * Returns true only if the request's semester matches the current semester
@@ -370,8 +367,8 @@ export default function StudentValidationRequest() {
       return;
     }
 
-    if (hasActiveOffense) {
-      setError('You cannot submit a validation request while you have unresolved offenses. Please resolve your offenses with the OSA first.');
+    if (hasMajorOffense) {
+      setError('You cannot submit a validation request while you have an unresolved major offense.');
       return;
     }
 
@@ -525,7 +522,7 @@ export default function StudentValidationRequest() {
     );
   }
 
-  if (hasActiveOffense && activeOffenses.length > 0) {
+  if (hasMajorOffense && majorOffenses.length > 0) {
     return (
       <div className="w-full max-w-6xl space-y-6">
         <Button 
@@ -552,7 +549,7 @@ export default function StudentValidationRequest() {
               <div className="p-4 bg-white border border-red-300 rounded-lg">
                 <h4 className="font-semibold text-red-800 mb-3">Active Offense(s):</h4>
                 <div className="space-y-3">
-                  {activeOffenses.map((offense) => (
+                  {majorOffenses.map((offense: any) => (
                     <div 
                       key={offense.id} 
                       className={`p-3 rounded border ${
@@ -831,17 +828,26 @@ export default function StudentValidationRequest() {
         Back to Dashboard
       </Button>
 
-      {validationPeriod.isActive && (
-        <Card className="border-green-200 bg-green-50">
-          <CardContent className="pt-6">
-            <div className="flex items-center gap-3">
-              <div className="shrink-0">
-                <div className="w-3 h-3 bg-green-500 rounded-full animate-pulse"></div>
-              </div>
-              <div>
-                <p className="font-semibold text-green-800">Validation Period Active</p>
-                <p className="text-sm text-green-700">{validationPeriod.message}</p>
-              </div>
+      {hasMinorOffense && minorOffenses.length > 0 && (
+        <Card className="border-amber-300 bg-amber-50">
+          <CardHeader>
+            <CardTitle className="flex items-center gap-2 text-amber-800">
+              ⚠️ Minor Offense on Record
+            </CardTitle>
+            <CardDescription className="text-amber-700">
+              You have an active minor offense. You may still submit your validation request, but you are advised to contact or visit the OSA to resolve it.
+            </CardDescription>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {minorOffenses.map((offense) => (
+                <div key={offense.id} className="p-3 bg-amber-100 border border-amber-300 rounded">
+                  <p className="font-semibold text-amber-900 text-sm">{offense.offenseTitle || 'Minor Offense'}</p>
+                  {offense.sanction && (
+                    <p className="text-xs text-amber-800 mt-1"><strong>Sanction:</strong> {offense.sanction}</p>
+                  )}
+                </div>
+              ))}
             </div>
           </CardContent>
         </Card>
