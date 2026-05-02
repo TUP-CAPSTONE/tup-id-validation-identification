@@ -1,6 +1,6 @@
 "use client";
 
-import { useState, useRef, useEffect, useCallback } from "react";
+import { useState, useRef, useEffect } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -20,8 +20,8 @@ import {
   SelectValue,
 } from "@/components/ui/select";
 import { majorOffenses, minorOffenses, Offense } from "@/lib/offense-data";
-import { db, auth } from "@/lib/firebaseConfig";
-import { collection, query, where, getDocs, addDoc, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebaseConfig";
+import { collection, query, where, getDocs } from "firebase/firestore";
 import { toast } from "sonner";
 import { Search, Loader2, AlertCircle } from "lucide-react";
 import { Alert, AlertDescription } from "@/components/ui/alert";
@@ -51,7 +51,7 @@ export function OSAFileOffenseForm() {
   const [dateCommitted, setDateCommitted] = useState("");
   const [offenseDescription, setOffenseDescription] = useState("");
   const [selectedSanction, setSelectedSanction] = useState<"first" | "second" | "third">("first");
-  
+
   // Submission
   const [submitting, setSubmitting] = useState(false);
 
@@ -68,8 +68,7 @@ export function OSAFileOffenseForm() {
     if (selectedOffenseNumber) {
       const offense = currentOffenses.find((o) => o.number === selectedOffenseNumber);
       setSelectedOffense(offense || null);
-      
-      // Scroll to selected offense
+
       if (offense && offenseRefs.current[selectedOffenseNumber]) {
         offenseRefs.current[selectedOffenseNumber]?.scrollIntoView({
           behavior: "smooth",
@@ -81,17 +80,13 @@ export function OSAFileOffenseForm() {
     }
   }, [selectedOffenseNumber, currentOffenses]);
 
-  // Auto-search with debounce (500ms delay)
+  // Auto-search with debounce
   useEffect(() => {
-    // Don't search if query is too short
     if (searchQuery.trim().length < 3) {
-      if (searchQuery.trim().length > 0) {
-        setSearchError("");
-      }
+      if (searchQuery.trim().length > 0) setSearchError("");
       return;
     }
 
-    // Clear previous selection when typing
     setSelectedStudent(null);
     setSearchError("");
 
@@ -113,14 +108,12 @@ export function OSAFileOffenseForm() {
     setSelectedStudent(null);
 
     try {
-      // Search in student_profiles collection
       const studentsRef = collection(db, "student_profiles");
-      
-      // Try to find by studentNumber first
+
+      // Try by studentNumber first, then email
       let q = query(studentsRef, where("studentNumber", "==", searchQuery.trim()));
       let snapshot = await getDocs(q);
-      
-      // If not found by studentNumber, try by email
+
       if (snapshot.empty) {
         q = query(studentsRef, where("email", "==", searchQuery.trim().toLowerCase()));
         snapshot = await getDocs(q);
@@ -135,10 +128,13 @@ export function OSAFileOffenseForm() {
       setSelectedStudent({
         uid: snapshot.docs[0].id,
         studentNumber: studentData.studentNumber,
-        fullName: studentData.fullName || studentData.name || `${studentData.firstName || ''} ${studentData.lastName || ''}`.trim(),
+        fullName:
+          studentData.fullName ||
+          studentData.name ||
+          `${studentData.firstName || ""} ${studentData.lastName || ""}`.trim(),
         email: studentData.email,
       });
-      
+
       toast.success("Student found!");
     } catch (error: any) {
       console.error("Error searching student:", error);
@@ -149,68 +145,56 @@ export function OSAFileOffenseForm() {
   };
 
   const handleSubmit = async () => {
-    // Validation
     if (!selectedStudent) {
       toast.error("Please select a student first");
       return;
     }
-
     if (!selectedOffense) {
       toast.error("Please select an offense");
       return;
     }
-
     if (!dateCommitted) {
       toast.error("Please enter the date offense was committed");
       return;
     }
-
     if (!offenseDescription.trim()) {
       toast.error("Please enter a narrative/description of the offense");
-      return;
-    }
-
-    if (!auth.currentUser) {
-      toast.error("You must be logged in to file an offense");
       return;
     }
 
     setSubmitting(true);
 
     try {
-      // Get the sanction based on the selected occurrence
-      const sanction = selectedOffense.sanctions[selectedSanction];
+      const res = await fetch("/api/osa/offenses/file", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          studentUid: selectedStudent.uid,
+          studentNumber: selectedStudent.studentNumber,
+          studentName: selectedStudent.fullName,
+          studentEmail: selectedStudent.email,
 
-      // Prepare offense data
-      const offenseData = {
-        studentUid: selectedStudent.uid,
-        studentNumber: selectedStudent.studentNumber,
-        studentName: selectedStudent.fullName,
-        studentEmail: selectedStudent.email,
-        
-        offenseNumber: selectedOffense.number,
-        offenseTitle: selectedOffense.title,
-        offenseType: offenseType,
-        offenseItems: selectedOffense.items || [],
-        
-        offenseDescription: offenseDescription.trim(),
-        sanction: sanction,
-        sanctionLevel: selectedSanction,
-        
-        dateCommitted: new Date(dateCommitted),
-        dateRecorded: serverTimestamp(),
-        
-        recordedBy: auth.currentUser.uid,
-        recordedByEmail: auth.currentUser.email,
-        
-        status: "active",
-      };
+          offenseNumber: selectedOffense.number,
+          offenseTitle: selectedOffense.title,
+          offenseType,
+          offenseItems: selectedOffense.items || [],
 
-      // Add to Firestore
-      await addDoc(collection(db, "student_offenses"), offenseData);
+          offenseDescription: offenseDescription.trim(),
+          sanction: selectedOffense.sanctions[selectedSanction],
+          sanctionLevel: selectedSanction,
+
+          dateCommitted,
+        }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to file offense");
+      }
 
       toast.success("Offense filed successfully", {
-        description: `Filed offense for ${selectedStudent.fullName}`,
+        description: `Filed offense for ${selectedStudent.fullName}. A notice has been sent to their email.`,
       });
 
       // Reset form
@@ -221,7 +205,6 @@ export function OSAFileOffenseForm() {
       setDateCommitted("");
       setOffenseDescription("");
       setSelectedSanction("first");
-
     } catch (error: any) {
       console.error("Error filing offense:", error);
       toast.error("Failed to file offense", {
@@ -259,7 +242,7 @@ export function OSAFileOffenseForm() {
               <Search className="h-4 w-4" />
             </Button>
           </div>
-          
+
           {searchQuery.trim().length > 0 && searchQuery.trim().length < 3 && (
             <p className="text-xs text-gray-500">Type at least 3 characters to auto-search...</p>
           )}
@@ -302,7 +285,6 @@ export function OSAFileOffenseForm() {
           <CardDescription>Browse and select from TUP Student Handbook</CardDescription>
         </CardHeader>
         <CardContent className="space-y-4">
-          {/* Offense Type and Jump to Selectors */}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
               <Label htmlFor="offenseType" className="mb-2 block">Offense Type</Label>
@@ -326,7 +308,7 @@ export function OSAFileOffenseForm() {
                 <SelectContent className="max-h-[300px]">
                   {currentOffenses.map((offense) => (
                     <SelectItem key={offense.number} value={offense.number}>
-                      #{offense.number} - {offense.title.length > 40 ? offense.title.substring(0, 40) + "..." : offense.title}
+                      #{offense.number} — {offense.title.length > 40 ? offense.title.substring(0, 40) + "..." : offense.title}
                     </SelectItem>
                   ))}
                 </SelectContent>
@@ -334,15 +316,13 @@ export function OSAFileOffenseForm() {
             </div>
           </div>
 
-          {/* Offenses List */}
+          {/* Scrollable offense list */}
           <div ref={scrollContainerRef} className="max-h-[400px] overflow-y-auto border rounded-lg p-4 bg-gray-50">
             <div className="space-y-3">
               {currentOffenses.map((offense) => (
                 <div
                   key={offense.number}
-                  ref={(el) => {
-                    offenseRefs.current[offense.number] = el;
-                  }}
+                  ref={(el) => { offenseRefs.current[offense.number] = el; }}
                   onClick={() => setSelectedOffenseNumber(offense.number)}
                   className={`border rounded-lg p-4 bg-white shadow-sm cursor-pointer transition-all hover:shadow-md ${
                     selectedOffenseNumber === offense.number
@@ -350,13 +330,10 @@ export function OSAFileOffenseForm() {
                       : "border-gray-300"
                   }`}
                 >
-                  {/* Offense Header */}
                   <div className="mb-2">
                     <div className="flex items-start gap-2">
                       <span className={`inline-flex items-center justify-center w-8 h-8 rounded-full text-sm font-bold ${
-                        offenseType === "major"
-                          ? "bg-red-600 text-white"
-                          : "bg-amber-500 text-white"
+                        offenseType === "major" ? "bg-red-600 text-white" : "bg-amber-500 text-white"
                       }`}>
                         {offense.number}
                       </span>
@@ -366,20 +343,16 @@ export function OSAFileOffenseForm() {
                     </div>
                   </div>
 
-                  {/* Offense Items */}
                   {offense.items && offense.items.length > 0 && (
                     <div className="mb-3 ml-10">
                       <ul className="list-disc list-outside space-y-1 text-xs text-gray-700">
                         {offense.items.map((item, idx) => (
-                          <li key={idx} className="pl-1">
-                            {item}
-                          </li>
+                          <li key={idx} className="pl-1">{item}</li>
                         ))}
                       </ul>
                     </div>
                   )}
 
-                  {/* Sanctions */}
                   <div className="ml-10 mt-3 pt-3 border-t border-gray-200">
                     <p className="text-xs font-semibold text-gray-700 mb-2">Sanctions:</p>
                     <div className="space-y-1 text-xs text-gray-600">
@@ -404,7 +377,7 @@ export function OSAFileOffenseForm() {
         </CardContent>
       </Card>
 
-      {/* Offense Details Form */}
+      {/* Offense Details */}
       <Card>
         <CardHeader>
           <CardTitle>Offense Details</CardTitle>
@@ -418,25 +391,28 @@ export function OSAFileOffenseForm() {
               type="date"
               value={dateCommitted}
               onChange={(e) => setDateCommitted(e.target.value)}
-              max={new Date().toISOString().split('T')[0]}
+              max={new Date().toISOString().split("T")[0]}
             />
           </div>
 
           <div>
             <Label htmlFor="sanctionLevel">Sanction to Apply</Label>
-            <Select value={selectedSanction} onValueChange={(val: "first" | "second" | "third") => setSelectedSanction(val)}>
+            <Select
+              value={selectedSanction}
+              onValueChange={(val: "first" | "second" | "third") => setSelectedSanction(val)}
+            >
               <SelectTrigger id="sanctionLevel">
                 <SelectValue />
               </SelectTrigger>
               <SelectContent>
                 <SelectItem value="first">
-                  1st Offense {selectedOffense && `- ${selectedOffense.sanctions.first}`}
+                  1st Offense {selectedOffense && `— ${selectedOffense.sanctions.first}`}
                 </SelectItem>
                 <SelectItem value="second">
-                  2nd Offense {selectedOffense && `- ${selectedOffense.sanctions.second}`}
+                  2nd Offense {selectedOffense && `— ${selectedOffense.sanctions.second}`}
                 </SelectItem>
                 <SelectItem value="third">
-                  3rd Offense {selectedOffense && `- ${selectedOffense.sanctions.third}`}
+                  3rd Offense {selectedOffense && `— ${selectedOffense.sanctions.third}`}
                 </SelectItem>
               </SelectContent>
             </Select>
@@ -452,9 +428,7 @@ export function OSAFileOffenseForm() {
               rows={6}
               className="resize-none"
             />
-            <p className="text-xs text-gray-500 mt-1">
-              {offenseDescription.length} characters
-            </p>
+            <p className="text-xs text-gray-500 mt-1">{offenseDescription.length} characters</p>
           </div>
 
           <Button
