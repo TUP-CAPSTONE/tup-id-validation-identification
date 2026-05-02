@@ -27,10 +27,26 @@ import {
 } from "@/components/ui/dialog";
 import { Textarea } from "@/components/ui/textarea";
 import { Label } from "@/components/ui/label";
-import { db, auth } from "@/lib/firebaseConfig";
-import { collection, query, getDocs, doc, updateDoc, orderBy, where, serverTimestamp } from "firebase/firestore";
+import { db } from "@/lib/firebaseConfig";
+import {
+  collection,
+  query,
+  getDocs,
+  doc,
+  updateDoc,
+  orderBy,
+  serverTimestamp,
+} from "firebase/firestore";
 import { toast } from "sonner";
-import { Search, Loader2, CheckCircle, AlertTriangle,  XCircle, RefreshCw } from "lucide-react";
+import {
+  Search,
+  Loader2,
+  CheckCircle,
+  AlertTriangle,
+  XCircle,
+  RefreshCw,
+  Mail,
+} from "lucide-react";
 
 interface Offense {
   id: string;
@@ -50,6 +66,9 @@ interface Offense {
   resolvedAt?: any;
   resolvedBy?: string;
   resolutionRemarks?: string;
+  guardianNotifiedAt?: any;
+  guardianNotifiedBy?: string;
+  guardianEmail?: string;
 }
 
 export function OSAManageOffenses() {
@@ -59,31 +78,32 @@ export function OSAManageOffenses() {
   const [searchQuery, setSearchQuery] = useState("");
   const [statusFilter, setStatusFilter] = useState<"all" | "active" | "resolved">("active");
   const [typeFilter, setTypeFilter] = useState<"all" | "major" | "minor">("all");
-  
+
   // Resolve dialog state
   const [resolveDialogOpen, setResolveDialogOpen] = useState(false);
   const [selectedOffense, setSelectedOffense] = useState<Offense | null>(null);
   const [resolutionRemarks, setResolutionRemarks] = useState("");
   const [resolving, setResolving] = useState(false);
 
-  /**
-   * Fetch all offenses from Firestore
-   */
+  // Email guardian state — tracks per-offense loading
+  const [emailingGuardian, setEmailingGuardian] = useState<string | null>(null);
+
+  // Guardian confirm dialog state
+  const [guardianDialogOpen, setGuardianDialogOpen] = useState(false);
+  const [guardianTargetOffense, setGuardianTargetOffense] = useState<Offense | null>(null);
+
   const fetchOffenses = async () => {
     try {
       setLoading(true);
       const offensesRef = collection(db, "student_offenses");
       const q = query(offensesRef, orderBy("dateRecorded", "desc"));
       const snapshot = await getDocs(q);
-      
+
       const offensesList: Offense[] = [];
       snapshot.forEach((docSnap) => {
-        offensesList.push({
-          id: docSnap.id,
-          ...docSnap.data(),
-        } as Offense);
+        offensesList.push({ id: docSnap.id, ...docSnap.data() } as Offense);
       });
-      
+
       setOffenses(offensesList);
     } catch (error) {
       console.error("Error fetching offenses:", error);
@@ -93,34 +113,26 @@ export function OSAManageOffenses() {
     }
   };
 
-  /**
-   * Filter offenses based on search and filters
-   */
   useEffect(() => {
     let filtered = [...offenses];
-    
-    // Apply status filter
+
     if (statusFilter !== "all") {
       filtered = filtered.filter((o) => o.status === statusFilter);
     }
-    
-    // Apply type filter
     if (typeFilter !== "all") {
       filtered = filtered.filter((o) => o.offenseType === typeFilter);
     }
-    
-    // Apply search
     if (searchQuery.trim()) {
-      const query = searchQuery.toLowerCase();
+      const q = searchQuery.toLowerCase();
       filtered = filtered.filter(
         (o) =>
-          o.studentName?.toLowerCase().includes(query) ||
-          o.studentNumber?.toLowerCase().includes(query) ||
-          o.studentEmail?.toLowerCase().includes(query) ||
-          o.offenseTitle?.toLowerCase().includes(query)
+          o.studentName?.toLowerCase().includes(q) ||
+          o.studentNumber?.toLowerCase().includes(q) ||
+          o.studentEmail?.toLowerCase().includes(q) ||
+          o.offenseTitle?.toLowerCase().includes(q)
       );
     }
-    
+
     setFilteredOffenses(filtered);
   }, [offenses, statusFilter, typeFilter, searchQuery]);
 
@@ -128,21 +140,15 @@ export function OSAManageOffenses() {
     fetchOffenses();
   }, []);
 
-  /**
-   * Open resolve dialog for an offense
-   */
   const handleOpenResolve = (offense: Offense) => {
     setSelectedOffense(offense);
     setResolutionRemarks("");
     setResolveDialogOpen(true);
   };
 
-  /**
-   * Resolve/Lift an offense
-   */
   const handleResolveOffense = async () => {
     if (!selectedOffense) return;
-    
+
     if (!resolutionRemarks.trim()) {
       toast.error("Please enter resolution remarks");
       return;
@@ -155,7 +161,7 @@ export function OSAManageOffenses() {
       await updateDoc(offenseRef, {
         status: "resolved",
         resolvedAt: serverTimestamp(),
-        resolvedBy: auth.currentUser?.email || "OSA",
+        resolvedBy: selectedOffense.studentEmail || "OSA",
         resolutionRemarks: resolutionRemarks.trim(),
       });
 
@@ -163,7 +169,6 @@ export function OSAManageOffenses() {
         description: `Offense for ${selectedOffense.studentName} has been resolved.`,
       });
 
-      // Update local state
       setOffenses((prev) =>
         prev.map((o) =>
           o.id === selectedOffense.id
@@ -183,9 +188,6 @@ export function OSAManageOffenses() {
     }
   };
 
-  /**
-   * Reopen a resolved offense
-   */
   const handleReopenOffense = async (offense: Offense) => {
     try {
       const offenseRef = doc(db, "student_offenses", offense.id);
@@ -200,7 +202,6 @@ export function OSAManageOffenses() {
         description: `Offense for ${offense.studentName} has been reopened.`,
       });
 
-      // Update local state
       setOffenses((prev) =>
         prev.map((o) =>
           o.id === offense.id
@@ -211,6 +212,63 @@ export function OSAManageOffenses() {
     } catch (error) {
       console.error("Error reopening offense:", error);
       toast.error("Failed to reopen offense");
+    }
+  };
+
+  /**
+   * Open guardian email confirmation dialog
+   */
+  const handleOpenEmailGuardian = (offense: Offense) => {
+    setGuardianTargetOffense(offense);
+    setGuardianDialogOpen(true);
+  };
+
+  /**
+   * Send email to guardian via API
+   */
+  const handleEmailGuardian = async () => {
+    if (!guardianTargetOffense) return;
+
+    setEmailingGuardian(guardianTargetOffense.id);
+    setGuardianDialogOpen(false);
+
+    try {
+      const res = await fetch("/api/osa/offenses/email-guardian", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ offenseId: guardianTargetOffense.id }),
+      });
+
+      const data = await res.json();
+
+      if (!res.ok) {
+        throw new Error(data.error || "Failed to send guardian email");
+      }
+
+      toast.success("Guardian notified successfully", {
+        description: `Email sent to guardian of ${guardianTargetOffense.studentName}.`,
+      });
+
+      // Reflect guardianNotifiedAt in local state so badge appears immediately
+      setOffenses((prev) =>
+        prev.map((o) =>
+          o.id === guardianTargetOffense.id
+            ? {
+                ...o,
+                guardianNotifiedAt: new Date(),
+                guardianEmail: data.guardianEmail,
+              }
+            : o
+        )
+      );
+    } catch (error: any) {
+      console.error("Error emailing guardian:", error);
+      toast.error("Failed to notify guardian", {
+        description: error.message || "Please try again",
+      });
+    } finally {
+      setEmailingGuardian(null);
+      setGuardianTargetOffense(null);
     }
   };
 
@@ -318,9 +376,7 @@ export function OSAManageOffenses() {
       <Card>
         <CardHeader>
           <CardTitle className="text-red-700">Student Offenses</CardTitle>
-          <CardDescription>
-            {filteredOffenses.length} offense(s) found
-          </CardDescription>
+          <CardDescription>{filteredOffenses.length} offense(s) found</CardDescription>
         </CardHeader>
         <CardContent>
           {loading ? (
@@ -364,11 +420,16 @@ export function OSAManageOffenses() {
                         >
                           {offense.status.toUpperCase()}
                         </span>
+                        {/* Guardian notified badge */}
+                        {offense.guardianNotifiedAt && (
+                          <span className="px-2 py-1 rounded text-xs font-semibold bg-blue-100 text-blue-800 flex items-center gap-1">
+                            <Mail className="w-3 h-3" />
+                            Guardian Notified
+                          </span>
+                        )}
                       </div>
 
-                      <h3 className="font-bold text-gray-900 mb-1">
-                        {offense.offenseTitle}
-                      </h3>
+                      <h3 className="font-bold text-gray-900 mb-1">{offense.offenseTitle}</h3>
 
                       <div className="text-sm text-gray-600 space-y-1">
                         <p>
@@ -409,19 +470,53 @@ export function OSAManageOffenses() {
                           )}
                         </div>
                       )}
+
+                      {/* Guardian notification log */}
+                      {offense.guardianNotifiedAt && offense.guardianEmail && (
+                        <div className="mt-3 p-2 bg-blue-50 border border-blue-200 rounded">
+                          <p className="text-xs text-blue-700">
+                            <strong>Guardian notified:</strong> {offense.guardianEmail}
+                            {offense.guardianNotifiedBy && (
+                              <> · by {offense.guardianNotifiedBy}</>
+                            )}
+                          </p>
+                        </div>
+                      )}
                     </div>
 
                     {/* Right: Actions */}
                     <div className="flex flex-row lg:flex-col gap-2">
                       {offense.status === "active" ? (
-                        <Button
-                          onClick={() => handleOpenResolve(offense)}
-                          size="sm"
-                          className="bg-green-600 hover:bg-green-700"
-                        >
-                          <CheckCircle className="w-4 h-4 mr-1" />
-                          Resolve
-                        </Button>
+                        <>
+                          <Button
+                            onClick={() => handleOpenResolve(offense)}
+                            size="sm"
+                            className="bg-green-600 hover:bg-green-700"
+                          >
+                            <CheckCircle className="w-4 h-4 mr-1" />
+                            Resolve
+                          </Button>
+
+                          <Button
+                            onClick={() => handleOpenEmailGuardian(offense)}
+                            size="sm"
+                            variant="outline"
+                            disabled={emailingGuardian === offense.id}
+                            className="border-blue-300 text-blue-700 hover:bg-blue-50"
+                          >
+                            {emailingGuardian === offense.id ? (
+                              <>
+                                <Loader2 className="w-4 h-4 mr-1 animate-spin" />
+                                Sending...
+                              </>
+                            ) : (
+                              <>
+                                <Mail className="w-4 h-4 mr-1" />
+                                {offense.guardianNotifiedAt ? "Re-notify Guardian" : "Notify Guardian"}
+                              </>
+                            )}
+                          </Button>
+                        </>
                       ) : (
                         <Button
                           onClick={() => handleReopenOffense(offense)}
@@ -495,6 +590,60 @@ export function OSAManageOffenses() {
               ) : (
                 "Resolve Offense"
               )}
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Email Guardian Confirmation Dialog */}
+      <Dialog open={guardianDialogOpen} onOpenChange={setGuardianDialogOpen}>
+        <DialogContent>
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Mail className="w-5 h-5 text-blue-600" />
+              Notify Guardian
+            </DialogTitle>
+            <DialogDescription>
+              This will send an email to the student's registered guardian with the full offense details and narrative.
+            </DialogDescription>
+          </DialogHeader>
+
+          {guardianTargetOffense && (
+            <div className="space-y-3">
+              <div className="p-3 bg-gray-50 border rounded-lg">
+                <p className="font-semibold">{guardianTargetOffense.offenseTitle}</p>
+                <p className="text-sm text-gray-600">
+                  Student: {guardianTargetOffense.studentName} ({guardianTargetOffense.studentNumber})
+                </p>
+              </div>
+
+              {guardianTargetOffense.guardianNotifiedAt && (
+                <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg">
+                  <p className="text-sm text-amber-800 font-medium">
+                    ⚠️ A guardian notification was already sent for this offense. Proceeding will send another email.
+                  </p>
+                </div>
+              )}
+
+              <p className="text-sm text-gray-500">
+                The guardian's email will be retrieved from the student's profile. Make sure the profile has a valid <code className="bg-gray-100 px-1 rounded">'Guardian's Email'</code> on record.
+              </p>
+            </div>
+          )}
+
+          <DialogFooter>
+            <Button
+              variant="outline"
+              onClick={() => setGuardianDialogOpen(false)}
+            >
+              Cancel
+            </Button>
+            <Button
+              onClick={handleEmailGuardian}
+              className="bg-blue-600 hover:bg-blue-700"
+            >
+              <Mail className="w-4 h-4 mr-2" />
+              Send Guardian Email
             </Button>
           </DialogFooter>
         </DialogContent>
