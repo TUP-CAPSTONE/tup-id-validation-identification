@@ -216,7 +216,7 @@ Full system control — manages all accounts, monitors entrance/exit logs, confi
 ```bash
 # Clone the repository
 git clone https://github.com/TUP-CAPSTONE/tup-id-validation-identification.git
-cd tup-siivs
+cd tup-id-validation-identification
 
 # Install dependencies
 npm install
