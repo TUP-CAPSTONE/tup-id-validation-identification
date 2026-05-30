@@ -141,22 +141,22 @@ Configurable ID validation periods, sticker claiming windows, semester lifecycle
 
 ```
 ┌─────────────────────────────────────────────────────────────┐
-│                    Next.js App  (Vercel)                     │
+│                    Next.js App  (Vercel)                    │
 │                                                             │
 │   ┌──────────────┐  ┌─────────────┐  ┌───────────────────┐  │
 │   │  Student UI  │  │  Admin UI   │  │  OSA  /  Gate UI  │  │
 │   └──────┬───────┘  └──────┬──────┘  └────────┬──────────┘  │
-│          └─────────────────┴───────────────────┘            │
-│                     Next.js API Routes                       │
+│          └─────────────────┴──────────────────┘             │
+│                     Next.js API Routes                      │
 │        ┌────────────────────┬──────────────────────┐        │
-│        │  Upstash Redis     │  Firebase Cloud       │        │
-│        │  (Rate Limiting)   │  Functions (Emails)   │        │
+│        │  Upstash Redis     │  Firebase Cloud      │        │
+│        │  (Rate Limiting)   │  Functions (Emails)  │        │
 │        └────────────────────┴──────────────────────┘        │
 └──────────────────────────┬──────────────────────────────────┘
                            │
-             ┌─────────────┴──────────────┐
-             │                            │
-   ┌─────────▼──────────┐    ┌────────────▼───────────────────┐
+             ┌─────────────┴───────────────┐
+             │                             │
+   ┌─────────▼───────────┐    ┌────────────▼───────────────────┐
    │     Firebase        │    │   Railway  (Python Service)    │
    │  ┌──────────────┐   │    │                                │
    │  │  Firestore   │   │    │  InsightFace  (embeddings)     │
@@ -164,7 +164,7 @@ Configurable ID validation periods, sticker claiming windows, semester lifecycle
    │  │  Storage     │   │    │  OpenCV       (image capture)  │
    │  │  Functions   │   │    │  ONNX Runtime (inference)      │
    │  └──────────────┘   │    │  NumPy        (computation)    │
-   └────────────────────-┘    └────────────────────────────────┘
+   └─────────────────────┘    └────────────────────────────────┘
 ```
 
 ---
@@ -215,7 +215,7 @@ Full system control — manages all accounts, monitors entrance/exit logs, confi
 
 ```bash
 # Clone the repository
-git clone https://github.com/<your-org>/tup-siivs.git
+git clone https://github.com/TUP-CAPSTONE/tup-id-validation-identification.git
 cd tup-siivs
 
 # Install dependencies
@@ -357,7 +357,7 @@ Student approaches camera
   Compare against FAISS Index
         │
    ┌────┴──────────────┐
-   │ Match Found?       │
+   │ Match Found?      │
    │                   │
   Yes                  No
    │                   │
@@ -532,7 +532,7 @@ permission from the authors is strictly prohibited.
 
 <div align="center">
 
-**Built with ❤️ by BSCS-4A · Technological University of the Philippines – Manila**
+**Built by BSCS-4A · Technological University of the Philippines – Manila**
 
 ![TUP](https://img.shields.io/badge/TUP--Manila-BSCS--4A%20Thesis%20Project-8B0000?style=for-the-badge)
 
